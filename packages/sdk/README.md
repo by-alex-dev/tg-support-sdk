@@ -22,6 +22,42 @@ const tgSupport = createWebTgSupport({
 
 After the host handles its own commands and payment updates, pass the remaining Telegram update to `await tgSupport.handleUpdate(update, { waitUntil: promise => context.waitUntil(promise) })`. Private user messages and supported forum updates become encrypted tg-support events. Unrelated or unsupported updates are ignored. Without `waitUntil`, event sending is awaited.
 
+Choose delivery durability in the host. Immediate delivery waits for the Service:
+
+```ts
+const event = await tgSupport.normalize(update);
+if (event) {
+  const result = await tgSupport.send([event]);
+  // Handle retryable or fatal before acknowledging this update.
+}
+```
+
+Background delivery lets the Bot answer while Service is slow. Configure the SDK logger to record its diagnostic codes without update bodies:
+
+```ts
+const tgSupport = createWebTgSupport(config, {
+  logger: { warn: event => console.warn(event) },
+});
+await tgSupport.handleUpdate(update, { waitUntil: work => context.waitUntil(work) });
+return new Response("OK");
+```
+
+`waitUntil` keeps that attempt alive; it does not persist or retry a failed event. Without a host retry policy, an event can be lost during an outage. For durable delivery, save the normalized event in the host's outbox before acknowledging Telegram, then reuse that exact event and `eventId` on retries. The following uses host-owned storage methods:
+
+```ts
+const event = await tgSupport.normalize(update);
+if (event) await outbox.put(event.eventId, event);
+return new Response("OK");
+
+// A separate host worker preserves acceptance order within each user scope.
+for await (const entry of outbox.ready()) {
+  const result = await tgSupport.send([entry.event]);
+  if (result.kind === "accepted") await outbox.remove(entry.id);
+  else if (result.kind === "retryable") await outbox.defer(entry.id, result.retryAfterMs);
+  else await outbox.block(entry.id, result.reason);
+}
+```
+
 At the tg-support command endpoint, return `await tgSupport.handleCommandRequest(request, { waitUntil: promise => context.waitUntil(promise) })`. It accepts signed POST challenges and command batches. Command acceptance returns HTTP 202; Telegram execution and result delivery run through `waitUntil`, in batch order. Keep the host's command endpoint available for this background work.
 
 For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter. Both constructors accept a `fetch(Request)` function, a millisecond `clock.now()`, a logger for structured diagnostic codes, and an optional `resolveProfile(userId)`. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link. The executor assembles only the closed method's named Telegram parameters.

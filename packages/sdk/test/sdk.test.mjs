@@ -13,6 +13,34 @@ const config = {
   configRevision: 1,
 };
 
+test("waitUntil lets the Bot respond while Service is slow and records failure without private data", { timeout: 10000 }, async t => {
+  for (const reason of ["server_error", "network"]) await t.test(reason, async () => {
+    const response = Promise.withResolvers();
+    const requested = Promise.withResolvers();
+    const logs = [], background = [];
+    const tgSupport = createWebTgSupport(config, {
+      logger: { warn: event => logs.push(event) },
+      fetch: async request => {
+        assert.equal(request.url, `${config.service.url}/events`);
+        requested.resolve();
+        await response.promise;
+        if (reason === "network") throw new Error("Private upstream failure details");
+        return new Response("Private upstream failure details", { status: 503 });
+      },
+    });
+    t.after(() => response.resolve());
+    await tgSupport.handleUpdate({ update_id: 101, message: { message_id: 42, date: 1,
+      chat: { id: 123456789, type: "private" }, from: { id: 123456789, is_bot: false, first_name: "Private display name" },
+      text: "Private message contents" } }, { waitUntil: work => background.push(work) });
+    await requested.promise;
+    assert.equal(background.length, 1, "The adapter returned while the Service request remained pending");
+    assert.deepEqual(logs, []);
+    response.resolve();
+    await Promise.all(background);
+    assert.deepEqual(logs, [{ kind: "event_not_accepted", reason }]);
+  });
+});
+
 test("normalization matches independent LP32BE HMAC vectors and performs no startup I/O", async () => {
   const tgSupport = createWebTgSupport(config, { fetch: async () => { throw new Error("Unexpected network access"); } });
   const event = await tgSupport.normalize({
