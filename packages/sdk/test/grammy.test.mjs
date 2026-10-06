@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Bot } from "grammy";
 import { createHmac } from "node:crypto";
-import { createGrammyTgSupport } from "../src/grammy.ts";
-import { StartupError, NotStartedError } from "../src/index.ts";
+import { createGrammyTgSupport } from "tg-support-sdk/grammy";
+import { StartupError, NotStartedError } from "tg-support-sdk";
 
 const now = 1700000000000;
 const key = Buffer.alloc(32);

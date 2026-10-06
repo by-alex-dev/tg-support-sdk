@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac, createDecipheriv, createCipheriv } from "node:crypto";
-import { createWebTgSupport, configure, ServiceError } from "../src/index.ts";
+import { createWebTgSupport, configure, ServiceError } from "tg-support-sdk";
 
 const config = {
   botToken: "12345:telegram-test-token",

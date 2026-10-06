@@ -1,8 +1,8 @@
 {
   "name": "tg-support-sdk",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "type": "module",
-  "files": ["dist", "README.md", "THIRD_PARTY_NOTICES"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "RELEASE.md", "THIRD_PARTY_NOTICES"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}, "./grammy": {"types": "./dist/grammy.d.ts", "default": "./dist/grammy.js"}},
   "bin": {"tg-support-sdk": "./dist/cli.js"},
   "scripts": {

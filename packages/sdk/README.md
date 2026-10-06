@@ -1,10 +1,20 @@
 # tg-support-sdk
 
-This branch prepares SDK 0.5.0, including the optional grammY adapter. It is not yet published. The Service wire minimum remains 0.4.0; the 1.0 API stabilization and live rollout are separate release steps.
+SDK 1.0.0 is prepared in source and has not been published. Its public API retains the 0.5.0 signatures; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Human publication, Vislaw adoption and real Telegram verification remain pending; follow [RELEASE.md](RELEASE.md).
+
+> **Back up `token_key` outside the Host before connecting a Bot. It is the only key to that Bot's state: losing it loses every Topic and Message link. It cannot be rotated.**
+>
+> **Never delete old `seal_key` entries. Future replies, edits and reactions can need ciphertext sealed years earlier. Add a new current key; retain all old keys.**
+>
+> **The Host owns reliable Event delivery, retries and acceptance order. The SDK has no durable outbox or retry loop. `waitUntil` keeps the current attempt alive; it does not persist an Event.**
 
 To publish a release, run `bash scripts/prepare-sdk-publish.sh` from the monorepo root. The wizard uses your personal npm account, builds the package, runs its tests and shows the tarball before publication. An npm organization is optional.
 
 The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Creating an SDK instance performs no network requests. The main entry bundles its protocol validation and has no runtime dependencies. The optional `tg-support-sdk/grammy` entry uses the host's grammY installation.
+
+Start with a separate Telegram Bot token held only by your Host. Open the tg-support Service bot, send `/start`, accept the published `/terms`, then obtain legitimate paid access or redeem a prepared Invite with `/invite <code>`. Create a Bot using `/newbot <name>` and save the one-time signing secret as `TG_SUPPORT_SECRET` before its message disappears after ten minutes. Account access and plan limits are enforced by the deployed Service; this guide does not grant them. Never send the Telegram Bot token or Host keys to the Service bot.
+
+After a human publishes this release, install `npm install --save-exact tg-support-sdk@1.0.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
 
 ```ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
@@ -62,6 +72,62 @@ for await (const entry of outbox.ready()) {
 
 At the tg-support command endpoint, return `await tgSupport.handleCommandRequest(request, { waitUntil: promise => context.waitUntil(promise) })`. It accepts signed POST challenges and command batches. Command acceptance returns HTTP 202; Telegram execution and result delivery run through `waitUntil`, in batch order. Keep the host's command endpoint available for this background work.
 
+For Cloudflare Pages Functions, share a configuration factory in `support.ts`:
+
+```ts
+import { createWebTgSupport, parseKeys } from "tg-support-sdk";
+
+export interface Env {
+  BOT_TOKEN: string; TELEGRAM_WEBHOOK_SECRET: string;
+  TG_SUPPORT_SERVICE_URL: string; TG_SUPPORT_SECRET: string;
+  TOKEN_KEY: string; SEAL_KEYS: string; SUPPORT_GROUP_ID: string;
+  TG_SUPPORT_HOST_URL: string; BUILD_REVISION: string;
+}
+export function support(env: Env) {
+  return createWebTgSupport({
+    botToken: env.BOT_TOKEN,
+    service: { url: env.TG_SUPPORT_SERVICE_URL, botSecret: env.TG_SUPPORT_SECRET },
+    keys: parseKeys({ tokenKey: env.TOKEN_KEY, sealKeys: env.SEAL_KEYS }),
+    supportGroupId: Number(env.SUPPORT_GROUP_ID),
+    features: { notificationsTopic: false, welcomeHint: false },
+    transport: { kind: "push", hostUrl: env.TG_SUPPORT_HOST_URL },
+    configRevision: Number(env.BUILD_REVISION),
+  });
+}
+```
+
+`functions/telegram.ts` authenticates Telegram's configured webhook secret before normalizing the update:
+
+```ts
+import type { PagesFunction } from "@cloudflare/workers-types";
+import { support, type Env } from "../support";
+
+export const onRequestPost: PagesFunction<Env> = async context => {
+  if (!context.env.TELEGRAM_WEBHOOK_SECRET ||
+      context.request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== context.env.TELEGRAM_WEBHOOK_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  await support(context.env).handleUpdate(await context.request.json(), {
+    waitUntil: work => context.waitUntil(work),
+  });
+  return new Response("OK");
+};
+```
+
+Route your own product commands and payment updates before this SDK handoff. Install `@cloudflare/workers-types` as a development dependency when using the shown Pages types. `functions/tg-support.ts` is the separate signed command endpoint; set `TG_SUPPORT_HOST_URL` to its exact public URL:
+
+```ts
+import type { PagesFunction } from "@cloudflare/workers-types";
+import { support, type Env } from "../support";
+
+export const onRequestPost: PagesFunction<Env> = context =>
+  support(context.env).handleCommandRequest(context.request, {
+    waitUntil: work => context.waitUntil(work),
+  });
+```
+
+After deploying Pages, run the explicit `configure` step below with the same keys, URLs, group and `BUILD_REVISION`. Configure Telegram's webhook separately with the same `TELEGRAM_WEBHOOK_SECRET`; the SDK does not set it. Pages deployment bindings and the Node configuration module must describe the same Bot.
+
 For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter. Both constructors accept a `fetch(Request)` function, a millisecond `clock.now()`, a logger for structured diagnostic codes, and an optional `resolveProfile(userId)`. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link. The executor assembles only the closed method's named Telegram parameters.
 
 `templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId }`. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal.
@@ -78,7 +144,7 @@ Private and support reaction updates carry the complete new list in a sealed blo
 
 Support edits and reactions seal their content under the source message token. Commands consuming them provide `source_message_id`: the sealed ID already stored for the group side of the message pair. A THREAD- or notice-scoped source ID also requires its existing topic or notice binding. The SDK authenticates this proof for the command's user, checks its group chat and opens content only for that message; the target message ID is checked against the destination chat separately. Private USER-scoped content omits `source_message_id`.
 
-Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; preserve keys needed by queued commands and stored blobs.
+Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; never remove any old entries.
 
 Run deployment configuration explicitly:
 
@@ -88,7 +154,7 @@ npx tg-support-sdk configure --config ./tg-support-config.mjs
 
 The module's default export is the same configuration passed to `createWebTgSupport`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator/topic permissions, then sends `bot_configured` to the service. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.
 
-Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep old seal keys for stored blocks. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
+Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep every old seal key permanently. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
 
 For a long-lived grammY host, install `grammy`.
 
