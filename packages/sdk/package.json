@@ -1,6 +1,6 @@
 {
   "name": "tg-support-sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "files": ["dist", "README.md", "THIRD_PARTY_NOTICES"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
