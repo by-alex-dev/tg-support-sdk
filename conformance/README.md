@@ -15,6 +15,7 @@ The TypeScript host owners run through public entry points and replace external 
 ```sh
 npm ci
 npm run build --workspace tg-support-protocol
+npm run build --workspace tg-support-sdk
 npm run test --workspace tg-support-sdk
 ```
 
@@ -27,4 +28,4 @@ TEST_DATABASE_URL=postgres://postgres:test-only@127.0.0.1:5432/postgres \
   npm run test --workspace tg-support-service
 ```
 
-Each fixture creates and removes its own database. The Host fake returns opaque receipt fields; it does not replace the Service's queue, transactions or admission policy. `protocol-boundaries.test.ts` checks malformed and unknown events with the failing event's index, oversized batches and whole-batch rejection. `ingest.test.ts` checks rollback when a later event fails semantic validation. `auth.test.ts` invokes the production rotation CLI and checks old/new keys, expiry, dual outgoing signatures, matched-key heartbeat replies and per-Bot event deduplication against real storage. `pull.test.ts` checks signed claims, shared flight limits, transfer deadlines, late results, storage rollback and mode changes. The canonical `smoke/test/first-user.test.ts` runs the same correspondence, profile, notice, edit, reaction, late-edit barrier, Host-outage and 50-user quota burst through push and pull with the public SDK, real HTTP and PostgreSQL. Account access states remain pending; schema compilation or one correspondence does not establish stable protocol readiness.
+Each fixture creates and removes its own database. The Host fake returns opaque receipt fields; it does not replace the Service's queue, transactions or admission policy. `protocol-boundaries.test.ts` checks malformed and unknown events with the failing event's index, oversized batches and whole-batch rejection. `ingest.test.ts` checks rollback when a later event fails semantic validation. `auth.test.ts` invokes the production rotation CLI and checks old/new keys, expiry, dual outgoing signatures, matched-key heartbeat replies and per-Bot event deduplication against real storage. `pull.test.ts` checks signed claims, shared flight limits, transfer deadlines, late results, storage rollback and mode changes. The canonical `smoke/test/first-user.test.ts` runs the same correspondence, profile, notice, edit, reaction, late-edit barrier, Host-outage and 50-user quota burst through Web push and grammY pull with the public SDK, real HTTP and PostgreSQL. The pull row uses a real grammY Bot, SDK startup and middleware, and one-shot `poll()`; commands and receipts originate from the real Service. Only external Telegram HTTP is replaced. Account access states remain pending; schema compilation or one correspondence does not establish stable protocol readiness.
