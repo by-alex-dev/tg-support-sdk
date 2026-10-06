@@ -290,6 +290,30 @@ test("normalization matches independent LP32BE HMAC vectors and performs no star
   decipher.setAAD(Buffer.from("00000009544753312d5345414c0000000531323334350000000c707269766174655f636861740000002083c3363b247d16d4e8cdaabcfd9ff4bf325cae1f1051db3abd8e40eb29562e6d", "hex"));
   decipher.setAuthTag(ciphertext.subarray(-16));
   assert.deepEqual(JSON.parse(Buffer.concat([decipher.update(ciphertext.subarray(0, -16)), decipher.final()]).toString("utf8")), { chat_id: 123456789 });
+  const original = { message_id: 909, date: 333, chat: { id: 123456789, type: "private" },
+    from: { id: 123456789, is_bot: false, first_name: "Private name", last_name: "Private surname", username: "private_handle", language_code: "rus" }, text: "Unique private text" };
+  const support = { ...original, message_thread_id: 555, chat: { id: config.supportGroupId, type: "supergroup" }, from: { ...original.from, id: 987654321 } };
+  const updates = [
+    { update_id: 910, message: original },
+    { update_id: 911, callback_query: { id: "private-callback", from: original.from, data: "Private callback data", message: original } },
+    { update_id: 912, edited_message: { ...original, edit_date: 444, text: "Unique changed private text", entities: [{ type: "bold", offset: 0, length: 4 }] } },
+    { update_id: 913, message_reaction: { chat: original.chat, message_id: 909, user: original.from, date: 333, old_reaction: [], new_reaction: [{ type: "custom_emoji", custom_emoji_id: "private-custom-emoji" }] } },
+    { update_id: 914, message: { ...support, reply_to_message: { message_id: 999 } } },
+    { update_id: 915, edited_message: { ...support, edit_date: 444, text: undefined, photo: [{ file_id: "private-file-id", width: 333, height: 445 }], caption: "Unique changed group caption" } },
+    { update_id: 916, message_reaction: { chat: support.chat, message_id: 909, user: support.from, date: 333, old_reaction: [], new_reaction: [{ type: "emoji", emoji: "❤️‍🔥" }] } },
+  ];
+  const leaves = value => value && typeof value === "object" ? Object.values(value).flatMap(leaves) : [value];
+  const stripPermittedMetadata = value => value && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).filter(([field]) => !["update_id", "edit_date"].includes(field)).map(([field, child]) => [field, stripPermittedMetadata(child)])) : value;
+  for (const update of updates) {
+    const normalized = await tgSupport.normalize(update);
+    assert.ok(normalized);
+    assert.equal((await tgSupport.normalize(update)).eventId, normalized.eventId);
+    const exposed = new Set(leaves(normalized));
+    for (const value of leaves(stripPermittedMetadata(update))) {
+      if (typeof value === "number" || typeof value === "string" && value.length >= 3) assert.equal(exposed.has(value), false, `Private update value was exposed by ${normalized.type}`);
+    }
+  }
 });
 
 test("push challenge verifies original bytes and the configured path despite a proxy rewrite", async () => {
@@ -306,6 +330,20 @@ test("push challenge verifies original bytes and the configured path despite a p
   assert.deepEqual(await response.json(), { kind: "challenge", response: createHmac("sha256", Buffer.alloc(32)).update(`TGS1-CHALLENGE\n${config.transport.hostUrl}\naaaaaaaaaaaaaaaaaaaaaa`).digest("hex") });
   const forged = new Request("https://internal.example/rewritten", { method: "POST", body: body + " ", headers: request.headers });
   assert.equal((await tgSupport.receivePush(forged)).response.status, 401);
+  for (const headers of [{}, { "X-Tg-Support-Timestamp": "1699999699", "X-Tg-Support-Signature": `v1=${signature}` },
+    { "X-Tg-Support-Timestamp": "1700000000", "X-Tg-Support-Signature": `v1=${"0".repeat(64)}` }]) {
+    const refused = await tgSupport.receivePush(new Request(config.transport.hostUrl, { method: "POST", body, headers }));
+    assert.equal(refused.response.status, 401);
+    assert.deepEqual(refused.commands, []);
+  }
+  const command = { op_id: "1", attempt_token: "aaaaaaaaaaaaaaaaaaaaaa", deadline_seconds: 60, subject: "a".repeat(43), method: "deleteMessage", params: {}, binding: null };
+  const batch = JSON.stringify({ kind: "commands", commands: [command] });
+  const batchSignature = createHmac("sha256", Buffer.alloc(32)).update(`TGS1-REQ\n1700000000\nPOST\n/tg-support?version=1\n${batch}`).digest("hex");
+  const delivery = () => new Request(config.transport.hostUrl, { method: "POST", body: batch, headers: {
+    "X-Tg-Support-Timestamp": "1700000000", "X-Tg-Support-Signature": `v1=${"0".repeat(64)},v1=${batchSignature}`,
+  } });
+  assert.equal((await tgSupport.receivePush(delivery())).commands.length, 1);
+  assert.equal((await tgSupport.receivePush(delivery())).commands.length, 0);
 });
 
 test("claim rejects an unauthenticated response rather than treating it as an empty queue", async () => {
@@ -344,6 +382,16 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   const accepted = await tgSupport.execute({ ...command, attemptToken: "bbbbbbbbbbbbbbbbbbbbbg", params: { ...command.params, message_id: { sealed: own.messageId } } });
   assert.equal(accepted.outcome.kind, "success");
   assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/copyMessage", body: { chat_id: 123456789, from_chat_id: 123456789, message_id: 42 } }]);
+  const rotated = createWebTgSupport({ ...config, keys: { ...config.keys, seal: { current: "Wxyz", keys: { ...config.keys.seal.keys, Wxyz: new Uint8Array(32).fill(7) } } } }, options);
+  const afterRotation = await rotated.normalize(message(123456789));
+  assert.equal(afterRotation.user, own.user);
+  assert.equal(afterRotation.message, own.message);
+  assert.equal(afterRotation.chat.startsWith("s1.Wxyz."), true);
+  requests.length = 0;
+  const oldKeyCopy = await rotated.execute({ ...command, params: { ...command.params, message_id: { sealed: own.messageId } } });
+  assert.equal(oldKeyCopy.outcome.kind, "success");
+  assert.equal(oldKeyCopy.outcome.created.messageId.startsWith("s1.Wxyz."), true);
+  assert.equal(requests.length, 1, "Retained old seal keys open queued commands while new results use the current key");
   requests.length = 0;
   assert.equal(await tgSupport.execute({ ...command, attemptToken: "cccccccccccccccccccccg", expiresAt: now }), null);
   assert.deepEqual(requests, []);

@@ -18,5 +18,6 @@ for (const file of await readdir(resolve(root, "dist"))) {
   await writeFile(target, source.replaceAll('"tg-support-protocol"', '"./protocol.js"').replace(/"(\.\/[^"\n]+)\.ts"/g, '"$1.js"'));
 }
 await build({ entryPoints: [resolve(root, "src/index.ts")], outfile: resolve(root, "dist/index.js"), bundle: true, platform: "browser", format: "esm", target: "es2022", sourcemap: true });
+await build({ entryPoints: [resolve(root, "src/grammy.ts")], outfile: resolve(root, "dist/grammy.js"), bundle: true, platform: "neutral", format: "esm", target: "es2022", external: ["grammy"], sourcemap: true });
 await build({ entryPoints: [resolve(root, "src/cli.ts")], outfile: resolve(root, "dist/cli.js"), bundle: true, platform: "node", format: "esm", target: "node24" });
 await chmod(resolve(root, "dist/cli.js"), 0o755);

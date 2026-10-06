@@ -2,7 +2,7 @@
 
 To publish a release, run `bash scripts/prepare-sdk-publish.sh` from the monorepo root. The wizard uses your personal npm account, builds the package, runs its tests and shows the tarball before publication. An npm organization is optional.
 
-The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Creating an SDK instance performs no network requests. The package bundles its protocol validation and has no runtime dependencies.
+The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Creating an SDK instance performs no network requests. The main entry bundles its protocol validation and has no runtime dependencies. The optional `tg-support-sdk/grammy` entry uses the host's grammY installation.
 
 ```ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
@@ -86,4 +86,44 @@ npx tg-support-sdk configure --config ./tg-support-config.mjs
 
 The module's default export is the same configuration passed to `createWebTgSupport`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator/topic permissions, then sends `bot_configured` to the service. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.
 
-This first slice supports private message ingestion and signed host execution. Pull scheduling and host-specific durable retry loops remain the caller's responsibility.
+Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep old seal keys for stored blocks. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
+
+For a long-lived grammY host, install `grammy` and import the separate adapter:
+
+```ts
+import { Bot } from "grammy";
+import { createGrammyTgSupport } from "tg-support-sdk/grammy";
+
+const bot = new Bot(env.BOT_TOKEN);
+const tgSupport = createGrammyTgSupport(bot, config);
+await tgSupport.start();
+bot.use(tgSupport.middleware());
+// Register the product's handlers after this middleware, or explicitly select updates before passing them on.
+await bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] });
+```
+
+`start()` checks the bot and forum permissions, registers `bot_configured` and initializes grammY's bot identity. Calls sharing a startup wait for the same check; another call after successful startup does not register again. Before startup, `normalize` and `execute` throw `NotStartedError`; the command endpoint returns 503. The middleware sends normalized events and awaits `next()`. A failed send throws `ServiceError`, so the host can apply its update retry policy. Pass an `onEvents` callback to `middleware` to write events to an existing outbox instead. Do not install inline grammY retry or throttling transformers for support calls; the Service owns Telegram retry policy and quotas.
+
+Use `handleCommandRequest` as the push endpoint, with the same `Request`, `Response` and optional `waitUntil` interface as the Web adapter. Telegram calls use `bot.api` and its transformers. Telegram errors preserve their code, description and `retry_after`; transport errors contain no external exception details.
+
+For local getUpdates development without a public URL, set `transport: { kind: "pull" }`. Use a separate test bot that does not have a Telegram webhook. The host schedules both loops; the SDK creates no timer:
+
+```ts
+import { setTimeout as sleep } from "node:timers/promises";
+const tgSupport = createGrammyTgSupport(bot, { ...config, transport: { kind: "pull" } });
+await tgSupport.start();
+bot.use(tgSupport.middleware());
+const controller = new AbortController();
+process.once("SIGINT", () => { controller.abort(); void bot.stop(); });
+await Promise.all([
+  bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] }),
+  (async () => {
+    while (!controller.signal.aborted) {
+      await tgSupport.poll();
+      await sleep(1000, undefined, { signal: controller.signal }).catch(() => {});
+    }
+  })(),
+]);
+```
+
+`poll()` makes one signed claim, executes each authenticated command and sends its result. It throws `ServiceError` on claim or result-send failure; choose retries and shutdown behavior in your host. A host without grammY uses `claim()` followed by `execute(command)` and `send([result])` in its own loop. Claim replies require a valid response signature. Push and pull use the same command authorizer, sealed data and result events.
