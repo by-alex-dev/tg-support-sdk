@@ -137,11 +137,12 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         }
         case "sendMessage": {
           const id = await thread(chat.kind === "group");
+          const replyParams = await reply(id);
           let text: FormattedText;
           const ref = record(params.text);
           if (ref?.sealed) { const opened = await keys.open("notice_text", [command.subject], sealed(params.text)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("NoticeTextPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; if (checked.value.entities && !entities) throw new Rejected("malformed"); text = { text: checked.value.text, ...(entities ? { entities } : {}) }; }
           else text = await render(params.text, ["topic_header", "new_user_notice", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"]);
-          request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...await reply(id) } }; break;
+          request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...replyParams } }; break;
         }
         case "editMessageText": {
           const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);

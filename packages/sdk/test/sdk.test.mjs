@@ -71,9 +71,10 @@ test("command authorization prevents another user's ciphertext reaching Telegram
     const method = path.split("/").at(-1);
     if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, username: "test_bot", is_bot: true } });
-    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChat" && body.chat_id === config.supportGroupId) return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
     if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
     requests.push({ path, body });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: body.chat_id, type: "private", first_name: "Fetched" } });
     return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: nextThread++ } : { message_id: returnedMessageId } });
   } };
   const tgSupport = createWebTgSupport(config, options);
@@ -223,6 +224,29 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/copyMessage", body: {
     chat_id: config.supportGroupId, message_thread_id: 55, from_chat_id: 123456789, message_id: 43, reply_parameters: { message_id: 2001 },
   } }]);
+  const profiledTgSupport = createWebTgSupport(config, { clock: options.clock, fetch: options.fetch });
+  const profiledHeader = { ...bound, method: "sendMessage", params: {
+    chat_id: groupChat, message_thread_id: groupThread,
+    text: { template: "topic_header", language: { sealed: own.language }, user: privateChat },
+  } };
+  for (const messageId of [own.messageId, other.messageId]) {
+    requests.length = 0;
+    const result = await profiledTgSupport.execute({ ...profiledHeader, params: {
+      ...profiledHeader.params, reply_to_message_id: { sealed: messageId },
+    } });
+    assert.equal(result.outcome.kind, "rejected_by_host");
+    assert.equal(result.outcome.reason, "blob_invalid");
+    assert.deepEqual(requests, [], "invalid reply must be rejected before fetching a template profile");
+  }
+  requests.length = 0;
+  assert.equal((await profiledTgSupport.execute({ ...profiledHeader, params: {
+    ...profiledHeader.params, reply_to_message_id: { sealed: groupCopy.outcome.created.messageId },
+  } })).outcome.kind, "success");
+  assert.deepEqual(requests.map(({ path }) => path.split("/").at(-1)), ["getChat", "sendMessage"]);
+  assert.deepEqual(requests[0].body, { chat_id: 123456789 });
+  assert.equal(requests[1].body.chat_id, config.supportGroupId);
+  assert.deepEqual(requests[1].body.reply_parameters, { message_id: 42 });
+  assert.equal(requests[1].body.text.includes("Fetched"), true);
 });
 
 test("unknown and wrong-slot template IDs are rejected without reaching Telegram", async () => {
