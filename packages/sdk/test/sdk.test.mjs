@@ -252,13 +252,19 @@ test("missing host translations use the default language and missing host templa
   } });
   const ru = await user("ru");
   const fr = await user("fr-CA");
+  const pt = await user("pt");
   const command = (event, template) => ({ opId: "40", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: event.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000,
     method: "sendMessage", params: { chat_id: { sealed: event.chat }, text: { template, language: { sealed: event.language } } } });
   for (const event of [ru, fr]) assert.equal((await tgSupport.execute(command(event, "welcome_hint"))).outcome.kind, "success");
   assert.equal((await tgSupport.execute(command(ru, "user_edited"))).outcome.kind, "success");
+  const builtinFallback = createWebTgSupport({ ...config, templates: { languages: ["ru", "en", "pt"], fallback: "ru" } }, {
+    clock: { now: () => now }, fetch: async (request) => { seen.push(await request.json()); return Response.json({ ok: true, result: { message_id: 77 } }); },
+  });
+  assert.equal((await builtinFallback.execute(command(pt, "welcome_hint"))).outcome.kind, "success");
   assert.deepEqual(seen, [
     { chat_id: 123456789, text: "Host fallback: en, null" },
     { chat_id: 123456789, text: "Host fallback: en, null" },
     { chat_id: 123456789, text: "✏️ Пользователь изменил сообщение." },
+    { chat_id: 123456789, text: "Если нужна помощь — просто напишите в этот чат, мы передадим сообщение в поддержку." },
   ]);
 });

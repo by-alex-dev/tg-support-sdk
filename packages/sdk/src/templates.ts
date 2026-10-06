@@ -11,9 +11,10 @@ export function renderTemplate(id: TemplateId, code: string | null, profile: Tel
   let rendered: FormattedText;
   if (override) rendered = override({ profile, language, verifiedUserId });
   else {
+    const builtinLanguage = language === "ru" || language === "en" ? language : fallback === "ru" ? "ru" : "en";
     const fullName = [profile?.firstName, profile?.lastName].filter((part) => part && part.trim() !== "").join(" ");
     const name = fullName || (profile?.username ? `@${profile.username}` : "");
-    const texts: Record<TemplateId, string> = language === "ru" ? {
+    const texts: Record<TemplateId, string> = builtinLanguage === "ru" ? {
       topic_title: name, topic_header: "Пользователь:", new_user_notice: "🆕 Новый пользователь:",
       notifications_topic_title: "Уведомления", welcome_hint: "Если нужна помощь — просто напишите в этот чат, мы передадим сообщение в поддержку.",
       user_edited: "✏️ Пользователь изменил сообщение.", edited_by_support: "✏️ Сообщение выше было изменено поддержкой.", replaced_by_support: "🔁 Предыдущее сообщение нельзя было изменить, поэтому мы удалили его и отправили новое.",
@@ -27,7 +28,7 @@ export function renderTemplate(id: TemplateId, code: string | null, profile: Tel
     if ((id === "topic_header" || id === "new_user_notice") && verifiedUserId !== null) {
       const label = texts[id]; const prefix = fullName ? `${label} ` : `${label} 👤 `; const linked = fullName || String(verifiedUserId);
       const tail = [profile?.username ? `@${profile.username}` : null, `(#u${verifiedUserId})`].filter((part) => part !== null).join(" ");
-      const instruction = id === "topic_header" ? language === "ru" ? "Пишите в этой теме, и пользователь получит ответ в своём чате с ботом." : "Write in this topic and the user will receive your reply in their chat with the bot." : language === "ru" ? "Чтобы написать пользователю, ответьте на это сообщение." : "Reply to this message to contact the user.";
+      const instruction = id === "topic_header" ? builtinLanguage === "ru" ? "Пишите в этой теме, и пользователь получит ответ в своём чате с ботом." : "Write in this topic and the user will receive your reply in their chat with the bot." : builtinLanguage === "ru" ? "Чтобы написать пользователю, ответьте на это сообщение." : "Reply to this message to contact the user.";
       rendered = { text: `${prefix}${linked} ${tail}\n\n${instruction}`, entities: [{ type: "text_link", offset: prefix.length, length: linked.length, url: `tg://user?id=${verifiedUserId}` }] };
     }
   }
