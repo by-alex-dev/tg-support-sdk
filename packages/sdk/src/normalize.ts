@@ -4,6 +4,7 @@ import type { FormattedText, Json, TgSupportEvent, TgSupportConfig, TelegramUser
 
 const serviceFields = ["new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo", "delete_chat_photo", "group_chat_created", "supergroup_chat_created", "channel_chat_created", "message_auto_delete_timer_changed", "migrate_to_chat_id", "migrate_from_chat_id", "pinned_message", "successful_payment", "refunded_payment", "users_shared", "chat_shared", "write_access_allowed", "video_chat_scheduled", "video_chat_started", "video_chat_ended", "video_chat_participants_invited", "web_app_data", "forum_topic_created", "forum_topic_closed", "forum_topic_reopened", "forum_topic_edited", "general_forum_topic_hidden", "general_forum_topic_unhidden"];
 const copyableFields = ["text", "photo", "audio", "video", "voice", "video_note", "animation", "document", "sticker", "contact", "location", "venue", "poll", "dice"];
+const captionableFields = ["photo", "audio", "video", "voice", "animation", "document"];
 export function createNormalizer(config: TgSupportConfig, botId: number, keys: Keyring) {
   const profileFields = async (id: number, profile: TelegramUserProfile) => {
     const user = await keys.token("user", id);
@@ -41,8 +42,9 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
         }
         if (edited) {
           if (!integer(message.edit_date) || message.edit_date < 0) return null;
-          const field = typeof message.text === "string" ? "text" : typeof message.caption === "string" ? "caption" : null; if (!field) return null;
-          const content: Record<string, Json> = field === "text" ? { field, text: String(message.text) } : { field, caption: String(message.caption) };
+          const field = typeof message.text === "string" ? "text" : typeof message.caption === "string" ||
+            message.caption === undefined && captionableFields.some((name) => message[name] !== undefined) ? "caption" : null; if (!field) return null;
+          const content: Record<string, Json> = field === "text" ? { field, text: String(message.text) } : { field, caption: typeof message.caption === "string" ? message.caption : "" };
           const entities = jsonRecords(field === "text" ? message.entities : message.caption_entities); if (entities) content[field === "text" ? "entities" : "caption_entities"] = entities;
           const preview = jsonRecord(message.link_preview_options); if (field === "text" && preview) content.link_preview_options = preview;
           if (field === "caption" && typeof message.show_caption_above_media === "boolean") content.show_caption_above_media = message.show_caption_above_media;
