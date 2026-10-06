@@ -7,7 +7,7 @@ import { createExecutor } from "./execute.ts";
 import { fetchBotApi } from "./bot-api.ts";
 import { registerBot } from "./startup.ts";
 export { generateKeys, parseKeys } from "./crypto.ts";
-export { ConfigError, StartupError, ServiceError } from "./errors.ts";
+export { ConfigError, StartupError, ServiceError, NotStartedError } from "./errors.ts";
 export type * from "./types.ts";
 export { fetchBotApi } from "./bot-api.ts";
 export function createTgSupport(input: { config: TgSupportConfig; botApi: BotApi; telegramBotId: number } & TgSupportOptions): TgSupport {

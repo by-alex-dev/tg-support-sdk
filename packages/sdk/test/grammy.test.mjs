@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Bot } from "grammy";
 import { createHmac } from "node:crypto";
 import { createGrammyTgSupport } from "../src/grammy.ts";
-import { StartupError } from "../src/index.ts";
+import { StartupError, NotStartedError } from "../src/index.ts";
 
 const now = 1700000000000;
 const key = Buffer.alloc(32);
@@ -44,7 +44,7 @@ test("real grammY middleware, startup and both command transports execute a comp
       const body = JSON.stringify({ commands: pending.splice(0) });
       return new Response(body, { headers: { "X-Tg-Support-Timestamp": "1700000000", "X-Tg-Support-Signature": `v1=${createHmac("sha256", key).update(`TGS1-RES\n1700000000\n200\n${route}\n${body}`).digest("hex")}` } });
     } });
-    await assert.rejects(tgSupport.normalize(privateUpdate), { name: "NotStartedError" });
+    await assert.rejects(tgSupport.normalize(privateUpdate), NotStartedError);
     assert.equal((await tgSupport.receivePush(new Request(config.transport.hostUrl))).response.status, 503);
     assert.equal(calls.length, 0);
     await tgSupport.start();
