@@ -15,7 +15,7 @@ for (const file of await readdir(resolve(root, "dist"))) {
   if (!file.endsWith(".d.ts")) continue;
   const target = resolve(root, "dist", file);
   const source = await readFile(target, "utf8");
-  await writeFile(target, source.replaceAll('"@support-relay/protocol"', '"./protocol.js"').replace(/"(\.\/[^"\n]+)\.ts"/g, '"$1.js"'));
+  await writeFile(target, source.replaceAll('"tg-support-protocol"', '"./protocol.js"').replace(/"(\.\/[^"\n]+)\.ts"/g, '"$1.js"'));
 }
 await build({ entryPoints: [resolve(root, "src/index.ts")], outfile: resolve(root, "dist/index.js"), bundle: true, platform: "browser", format: "esm", target: "es2022", sourcemap: true });
 await build({ entryPoints: [resolve(root, "src/cli.ts")], outfile: resolve(root, "dist/cli.js"), bundle: true, platform: "node", format: "esm", target: "node24" });

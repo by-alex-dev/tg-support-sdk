@@ -5,12 +5,12 @@ export class ServiceError extends Error {
   override name = "ServiceError";
   readonly result: Exclude<SendResult, { kind: "accepted" }>;
   constructor(result: Exclude<SendResult, { kind: "accepted" }>) {
-    super("Support Relay service request failed.");
+    super("tg-support service request failed.");
     this.result = result;
   }
 }
 export class StartupError extends Error {
   override name = "StartupError";
   readonly problems: readonly string[];
-  constructor(problems: readonly string[]) { super("Support Relay configuration could not be registered."); this.problems = problems; }
+  constructor(problems: readonly string[]) { super("tg-support configuration could not be registered."); this.problems = problems; }
 }

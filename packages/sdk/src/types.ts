@@ -1,11 +1,11 @@
-import type { Event, Outcome, Command as WireCommand, Method, MethodParams, TemplateId, BlobPurpose, TokenPurpose } from "@support-relay/protocol";
+import type { Event, Outcome, Command as WireCommand, Method, MethodParams, TemplateId, BlobPurpose, TokenPurpose } from "tg-support-protocol";
 
 type Camel<S extends string> = S extends `${infer A}_${infer B}` ? `${A}${Capitalize<Camel<B>>}` : S;
 type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] };
 export type CamelData<T> = T extends readonly (infer U)[] ? CamelData<U>[] : T extends object
   ? { [K in keyof Known<T> as K extends string ? Camel<K> : K]: CamelData<T[K]> } : T;
-export type RelayEvent = CamelData<Event>;
-export type RelayOutcome = CamelData<Outcome>;
+export type TgSupportEvent = CamelData<Event>;
+export type TgSupportOutcome = CamelData<Outcome>;
 export type Command = Omit<CamelData<WireCommand>, "params"> & { params: Readonly<Record<string, unknown>>; receivedAt: number; expiresAt: number };
 export type CommandRecipe = { [M in Method]: { method: M; params: MethodParams[M] } }[Method];
 export type { Method, TemplateId, BlobPurpose, TokenPurpose };
@@ -14,10 +14,10 @@ export type TelegramUserProfile = { firstName?: string; lastName?: string; usern
 export type FormattedText = { text: string; entities?: readonly Record<string, Json>[] };
 export type Render = (context: { profile: TelegramUserProfile | null; language: string }) => FormattedText;
 export type TemplateConfig = { languages: readonly string[]; fallback: string; overrides?: Partial<Record<TemplateId, Partial<Record<string, Render>>>> };
-export type RelayKeys = { tokenKey: Uint8Array; seal: { current: string; keys: Readonly<Record<string, Uint8Array>> } };
-export type RelayConfig = {
+export type TgSupportKeys = { tokenKey: Uint8Array; seal: { current: string; keys: Readonly<Record<string, Uint8Array>> } };
+export type TgSupportConfig = {
   service: { url: string; botSecret: string };
-  keys: RelayKeys;
+  keys: TgSupportKeys;
   supportGroupId: number;
   features: { notificationsTopic: boolean; welcomeHint: boolean };
   transport: { kind: "push"; hostUrl: string } | { kind: "pull" };
@@ -28,7 +28,7 @@ export type RelayConfig = {
 export type Fetch = (request: Request) => Promise<Response>;
 export type Clock = { now(): number };
 export type Logger = { debug?(event: { kind: string }): void; warn?(event: { kind: string; reason?: string }): void };
-export type RelayOptions = { fetch?: Fetch; clock?: Clock; logger?: Logger; resolveProfile?: (userId: number) => Promise<TelegramUserProfile | null> };
+export type TgSupportOptions = { fetch?: Fetch; clock?: Clock; logger?: Logger; resolveProfile?: (userId: number) => Promise<TelegramUserProfile | null> };
 export type WaitUntil = (promise: Promise<unknown>) => void;
 export type SendResult =
   | { kind: "accepted" }
@@ -62,15 +62,15 @@ export interface BotApi {
   getMe(): Promise<{ id: number; username: string }>;
   inspectGroup(chatId: number, botId: number): Promise<GroupFacts>;
 }
-export interface SupportRelay {
-  normalize(update: unknown): Promise<RelayEvent | null>;
-  hostNotice(user: { id: number; profile: TelegramUserProfile }, text: FormattedText, idempotencyKey?: string): Promise<RelayEvent>;
-  userForget(userId: number): Promise<RelayEvent>;
-  send(events: readonly RelayEvent[]): Promise<SendResult>;
+export interface TgSupport {
+  normalize(update: unknown): Promise<TgSupportEvent | null>;
+  hostNotice(user: { id: number; profile: TelegramUserProfile }, text: FormattedText, idempotencyKey?: string): Promise<TgSupportEvent>;
+  userForget(userId: number): Promise<TgSupportEvent>;
+  send(events: readonly TgSupportEvent[]): Promise<SendResult>;
   receivePush(request: Request): Promise<{ response: Response; commands: Command[] }>;
   handleUpdate(update: unknown, options?: { waitUntil?: WaitUntil }): Promise<void>;
   handleCommandRequest(request: Request, options?: { waitUntil?: WaitUntil }): Promise<Response>;
-  execute(command: Command): Promise<RelayEvent | null>;
+  execute(command: Command): Promise<TgSupportEvent | null>;
   claim(): Promise<Command[]>;
   heartbeat(command: Command): Promise<{ kind: "accepted"; command: Command } | Exclude<SendResult, { kind: "accepted" }>>;
   readonly allowedUpdates: readonly string[];

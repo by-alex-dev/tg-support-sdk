@@ -1,10 +1,10 @@
 import { record, integer, jsonRecords, jsonRecord } from "./parse.ts";
 import type { Keyring } from "./crypto.ts";
-import type { FormattedText, Json, RelayEvent, RelayConfig, TelegramUserProfile } from "./types.ts";
+import type { FormattedText, Json, TgSupportEvent, TgSupportConfig, TelegramUserProfile } from "./types.ts";
 
 const serviceFields = ["new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo", "delete_chat_photo", "group_chat_created", "supergroup_chat_created", "channel_chat_created", "message_auto_delete_timer_changed", "migrate_to_chat_id", "migrate_from_chat_id", "pinned_message", "successful_payment", "refunded_payment", "users_shared", "chat_shared", "write_access_allowed", "video_chat_scheduled", "video_chat_started", "video_chat_ended", "video_chat_participants_invited", "web_app_data", "forum_topic_created", "forum_topic_closed", "forum_topic_reopened", "forum_topic_edited", "general_forum_topic_hidden", "general_forum_topic_unhidden"];
 const copyableFields = ["text", "photo", "audio", "video", "voice", "video_note", "animation", "document", "sticker", "contact", "location", "venue", "poll", "dice"];
-export function createNormalizer(config: RelayConfig, botId: number, keys: Keyring) {
+export function createNormalizer(config: TgSupportConfig, botId: number, keys: Keyring) {
   const profileFields = async (id: number, profile: TelegramUserProfile) => {
     const user = await keys.token("user", id);
     return { user, profile: await keys.token("profile", profile.firstName ?? "", profile.lastName ?? "", profile.username ?? "", profile.languageCode ?? ""),
@@ -13,7 +13,7 @@ export function createNormalizer(config: RelayConfig, botId: number, keys: Keyri
   const parseProfile = (from: Record<string, unknown>): TelegramUserProfile => ({ ...(typeof from.first_name === "string" ? { firstName: from.first_name } : {}), ...(typeof from.last_name === "string" ? { lastName: from.last_name } : {}), ...(typeof from.username === "string" ? { username: from.username } : {}), ...(typeof from.language_code === "string" ? { languageCode: from.language_code } : {}) });
   const eventId = async (id: number) => `u-${(await keys.token("event", botId, id)).slice(0, 32)}`;
   return {
-    async normalize(input: unknown): Promise<RelayEvent | null> {
+    async normalize(input: unknown): Promise<TgSupportEvent | null> {
       try {
         const update = record(input);
         if (!update || !integer(update.update_id) || update.update_id < 0) return null;
@@ -59,14 +59,14 @@ export function createNormalizer(config: RelayConfig, botId: number, keys: Keyri
         return { type: "support_message", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, messageId, replyTo, replyScopedMessageId: replyTo && integer(replied?.message_id) ? await keys.seal("message_id", replyTo, { message_id: replied.message_id }) : null, copyable };
       } catch { return null; }
     },
-    async hostNotice(user: { id: number; profile: TelegramUserProfile }, text: FormattedText, idempotencyKey?: string): Promise<RelayEvent> {
+    async hostNotice(user: { id: number; profile: TelegramUserProfile }, text: FormattedText, idempotencyKey?: string): Promise<TgSupportEvent> {
       const reference = await profileFields(user.id, user.profile);
       return { type: "host_notice", eventId: idempotencyKey === undefined ? crypto.randomUUID() : `n-${(await keys.token("notice", idempotencyKey)).slice(0, 32)}`, ...reference, text: await keys.seal("notice_text", reference.user, { text: text.text, ...(text.entities ? { entities: [...text.entities] } : {}) }) };
     },
-    async userForget(userId: number): Promise<RelayEvent> { return { type: "user_forget", eventId: crypto.randomUUID(), user: await keys.token("user", userId) }; },
-    async botConfigured(): Promise<RelayEvent> {
+    async userForget(userId: number): Promise<TgSupportEvent> { return { type: "user_forget", eventId: crypto.randomUUID(), user: await keys.token("user", userId) }; },
+    async botConfigured(): Promise<TgSupportEvent> {
       const group = await keys.token("group", config.supportGroupId);
-      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: "support-relay-ts/0.1.0", configRevision: config.configRevision };
+      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: "tg-support-sdk/0.2.0", configRevision: config.configRevision };
     },
   };
 }

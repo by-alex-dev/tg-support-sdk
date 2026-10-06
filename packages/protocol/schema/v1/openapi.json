@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Support Relay protocol",
+    "title": "tg-support protocol",
     "version": "1.0.0",
-    "description": "Asynchronous host/service protocol. Request HMAC covers SR1-REQ\\n<timestamp>\\nPOST\\n<path+query>\\n<raw body>; claim/heartbeat response HMAC covers SR1-RES\\n<timestamp>\\n<status>\\n<path+query>\\n<raw body>. Signature is v1=<lowercase hex HMAC-SHA256>; K is decoded third part of srs1.<bot_uuid>.<base64url_key>. Verify before parsing, within ±300 seconds. Unknown object fields are ignored. See docs/design/protocol.md for AEAD subjects, atomic batches, operation ordering and result correlation."
+    "description": "Asynchronous host/service protocol. Request HMAC covers TGS1-REQ\\n<timestamp>\\nPOST\\n<path+query>\\n<raw body>; claim/heartbeat response HMAC covers TGS1-RES\\n<timestamp>\\n<status>\\n<path+query>\\n<raw body>. Signature is v1=<lowercase hex HMAC-SHA256>; K is decoded third part of tgs1.<bot_uuid>.<base64url_key>. Verify before parsing, within ±300 seconds. Unknown object fields are ignored. See docs/design/protocol.md for AEAD subjects, atomic batches, operation ordering and result correlation."
   },
   "servers": [
     {
@@ -21,12 +21,12 @@
       "post": {
         "security": [
           {
-            "RelaySignature": []
+            "TgSupportSignature": []
           }
         ],
         "parameters": [
           {
-            "name": "X-Relay-Bot",
+            "name": "X-Tg-Support-Bot",
             "in": "header",
             "required": true,
             "schema": {
@@ -35,7 +35,7 @@
             }
           },
           {
-            "name": "X-Relay-Timestamp",
+            "name": "X-Tg-Support-Timestamp",
             "in": "header",
             "required": true,
             "schema": {
@@ -137,12 +137,12 @@
       "post": {
         "security": [
           {
-            "RelaySignature": []
+            "TgSupportSignature": []
           }
         ],
         "parameters": [
           {
-            "name": "X-Relay-Bot",
+            "name": "X-Tg-Support-Bot",
             "in": "header",
             "required": true,
             "schema": {
@@ -151,7 +151,7 @@
             }
           },
           {
-            "name": "X-Relay-Timestamp",
+            "name": "X-Tg-Support-Timestamp",
             "in": "header",
             "required": true,
             "schema": {
@@ -182,13 +182,13 @@
               }
             },
             "headers": {
-              "X-Relay-Timestamp": {
+              "X-Tg-Support-Timestamp": {
                 "required": true,
                 "schema": {
                   "type": "string"
                 }
               },
-              "X-Relay-Signature": {
+              "X-Tg-Support-Signature": {
                 "required": true,
                 "schema": {
                   "type": "string"
@@ -226,12 +226,12 @@
       "post": {
         "security": [
           {
-            "RelaySignature": []
+            "TgSupportSignature": []
           }
         ],
         "parameters": [
           {
-            "name": "X-Relay-Bot",
+            "name": "X-Tg-Support-Bot",
             "in": "header",
             "required": true,
             "schema": {
@@ -240,7 +240,7 @@
             }
           },
           {
-            "name": "X-Relay-Timestamp",
+            "name": "X-Tg-Support-Timestamp",
             "in": "header",
             "required": true,
             "schema": {
@@ -271,13 +271,13 @@
               }
             },
             "headers": {
-              "X-Relay-Timestamp": {
+              "X-Tg-Support-Timestamp": {
                 "required": true,
                 "schema": {
                   "type": "string"
                 }
               },
-              "X-Relay-Signature": {
+              "X-Tg-Support-Signature": {
                 "required": true,
                 "schema": {
                   "type": "string"
@@ -317,12 +317,12 @@
       "post": {
         "security": [
           {
-            "RelaySignature": []
+            "TgSupportSignature": []
           }
         ],
         "parameters": [
           {
-            "name": "X-Relay-Timestamp",
+            "name": "X-Tg-Support-Timestamp",
             "in": "header",
             "required": true,
             "schema": {
@@ -332,7 +332,7 @@
           }
         ],
         "operationId": "receivePush",
-        "description": "POST to configured host_url. Verify against its configured path/query. A challenge response HMAC covers SR1-CHALLENGE\\n<host_url exactly as configured>\\n<nonce>. No commands reach a new URL before successful challenge. HTTPS only; prohibit service/private address ranges on each connection and redirects.",
+        "description": "POST to configured host_url. Verify against its configured path/query. A challenge response HMAC covers TGS1-CHALLENGE\\n<host_url exactly as configured>\\n<nonce>. No commands reach a new URL before successful challenge. HTTPS only; prohibit service/private address ranges on each connection and redirects.",
         "requestBody": {
           "required": true,
           "content": {
@@ -386,10 +386,10 @@
   },
   "components": {
     "securitySchemes": {
-      "RelaySignature": {
+      "TgSupportSignature": {
         "type": "apiKey",
         "in": "header",
-        "name": "X-Relay-Signature",
+        "name": "X-Tg-Support-Signature",
         "description": "One or more v1=<64 lowercase hex HMAC> values separated by comma and space."
       }
     },

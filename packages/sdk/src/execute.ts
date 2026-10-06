@@ -1,23 +1,23 @@
-import { isMethod } from "@support-relay/protocol";
-import { createBrowserProtocolValidators } from "@support-relay/protocol/browser-validation";
-import type { Binding } from "@support-relay/protocol";
+import { isMethod } from "tg-support-protocol";
+import { createBrowserProtocolValidators } from "tg-support-protocol/browser-validation";
+import type { Binding } from "tg-support-protocol";
 import type { Keyring } from "./crypto.ts";
 import { record, jsonRecord, jsonRecords } from "./parse.ts";
 import { renderTemplate } from "./templates.ts";
-import type { BotApi, BotApiOutcome, Command, FormattedText, Json, RelayConfig, RelayEvent, RelayOptions, RelayOutcome, TelegramRequest, TemplateId } from "./types.ts";
+import type { BotApi, BotApiOutcome, Command, FormattedText, Json, TgSupportConfig, TgSupportEvent, TgSupportOptions, TgSupportOutcome, TelegramRequest, TemplateId } from "./types.ts";
 
-type Reason = Extract<RelayOutcome, { kind: "rejected_by_host" }>["reason"];
+type Reason = Extract<TgSupportOutcome, { kind: "rejected_by_host" }>["reason"];
 class Rejected extends Error { readonly reason: Reason; constructor(reason: Reason) { super("Command rejected."); this.reason = reason; } }
 class ProfileFailed extends Error { readonly outcome: Extract<BotApiOutcome, { ok: false }>; constructor(outcome: Extract<BotApiOutcome, { ok: false }>) { super("Profile lookup failed."); this.outcome = outcome; } }
 const validators = createBrowserProtocolValidators();
 
-export function createExecutor(config: RelayConfig, keys: Keyring, botApi: BotApi, options: RelayOptions) {
+export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: BotApi, options: TgSupportOptions) {
   const clock = options.clock ?? { now: () => Date.now() };
-  const operationResult = (command: Command, outcome: RelayOutcome): RelayEvent => ({ type: "operation_result", eventId: `r-${command.attemptToken}`, opId: command.opId, attemptToken: command.attemptToken, outcome });
-  const apiError = (outcome: Extract<BotApiOutcome, { ok: false }>): RelayOutcome => outcome.kind === "telegram"
+  const operationResult = (command: Command, outcome: TgSupportOutcome): TgSupportEvent => ({ type: "operation_result", eventId: `r-${command.attemptToken}`, opId: command.opId, attemptToken: command.attemptToken, outcome });
+  const apiError = (outcome: Extract<BotApiOutcome, { ok: false }>): TgSupportOutcome => outcome.kind === "telegram"
     ? { kind: "telegram_error", errorCode: outcome.errorCode, description: outcome.description, retryAfter: outcome.retryAfter }
     : { kind: "transport_error", description: outcome.description };
-  return async (command: Command): Promise<RelayEvent | null> => {
+  return async (command: Command): Promise<TgSupportEvent | null> => {
     if (clock.now() >= command.expiresAt || clock.now() >= command.receivedAt + 3_600_000) return null;
     try {
       const wire = { op_id: command.opId, attempt_token: command.attemptToken, deadline_seconds: command.deadlineSeconds, subject: command.subject, method: command.method, params: command.params, binding: command.binding };

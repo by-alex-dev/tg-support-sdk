@@ -1,6 +1,6 @@
 {
   "name": "tg-support-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "files": ["dist", "README.md", "THIRD_PARTY_NOTICES"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
@@ -11,7 +11,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "@support-relay/protocol": "0.1.0",
+    "tg-support-protocol": "0.1.0",
     "esbuild": "0.28.2",
     "typescript": "6.0.3"
   }

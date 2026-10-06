@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://support-relay.dev/protocol/v1/schema.json",
+  "$id": "https://tg-support.dev/protocol/v1/schema.json",
   "title": "ProtocolV1",
   "description": "Wire contracts from docs/design/protocol.md. Unknown fields are accepted and consumers use only documented fields. Command envelope validation precedes method authorization; method recipes and AEAD address checks are separate.",
   "definitions": {

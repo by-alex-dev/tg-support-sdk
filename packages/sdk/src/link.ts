@@ -1,22 +1,22 @@
-import { createBrowserProtocolValidators } from "@support-relay/protocol/browser-validation";
-import type { Command as WireCommand } from "@support-relay/protocol";
+import { createBrowserProtocolValidators } from "tg-support-protocol/browser-validation";
+import type { Command as WireCommand } from "tg-support-protocol";
 import { concat, hmac, importHmac } from "./crypto.ts";
 import { signingSecret } from "./config.ts";
 import { ServiceError } from "./errors.ts";
 import { record } from "./parse.ts";
-import type { RelayConfig, RelayOptions, RelayEvent, Command, SendResult } from "./types.ts";
+import type { TgSupportConfig, TgSupportOptions, TgSupportEvent, Command, SendResult } from "./types.ts";
 
 const encoder = new TextEncoder();
 const validators = createBrowserProtocolValidators();
 const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-export function createServiceLink(config: RelayConfig, options: RelayOptions) {
+export function createServiceLink(config: TgSupportConfig, options: TgSupportOptions) {
   const fetcher = options.fetch ?? ((request: Request) => fetch(request));
   const clock = options.clock ?? { now: () => Date.now() };
   const secret = signingSecret(config.service.botSecret);
   const key = importHmac(secret.key);
   const seen = new Map<string, number>();
   const path = (url: string) => { const parsed = new URL(url); return parsed.pathname + parsed.search; };
-  const canonical = (kind: "REQ" | "RES", timestamp: string, method: string, route: string, bytes: Uint8Array) => concat(encoder.encode(`SR1-${kind}\n${timestamp}\n${method}\n${route}\n`), bytes);
+  const canonical = (kind: "REQ" | "RES", timestamp: string, method: string, route: string, bytes: Uint8Array) => concat(encoder.encode(`TGS1-${kind}\n${timestamp}\n${method}\n${route}\n`), bytes);
   const commands = (items: readonly WireCommand[]): Command[] => {
     const receivedAt = clock.now();
     for (const [token, expires] of seen) if (expires <= receivedAt) seen.delete(token);
@@ -30,10 +30,10 @@ export function createServiceLink(config: RelayConfig, options: RelayOptions) {
     });
   };
   const verify = async (headers: Headers, bytes: Uint8Array<ArrayBuffer>, kind: "REQ" | "RES", method: string, route: string): Promise<boolean> => {
-    const timestamp = headers.get("X-Relay-Timestamp") ?? "";
+    const timestamp = headers.get("X-Tg-Support-Timestamp") ?? "";
     if (!/^(0|[1-9][0-9]*)$/.test(timestamp) || Math.abs(clock.now() / 1000 - Number(timestamp)) > 300) return false;
     const data = canonical(kind, timestamp, method, route, bytes);
-    for (const signature of (headers.get("X-Relay-Signature") ?? "").split(",")) {
+    for (const signature of (headers.get("X-Tg-Support-Signature") ?? "").split(",")) {
       const match = /^v1=([a-f0-9]{64})$/.exec(signature.trim());
       if (!match?.[1]) continue;
       const digest = Uint8Array.from(match[1].match(/../g) ?? [], (part) => Number.parseInt(part, 16));
@@ -61,11 +61,11 @@ export function createServiceLink(config: RelayConfig, options: RelayOptions) {
     const timestamp = String(Math.floor(clock.now() / 1000));
     try {
       const signature = hex(await hmac(await key, canonical("REQ", timestamp, "POST", path(url), bytes)));
-      return await fetcher(new Request(url, { method: "POST", body: bytes, redirect: "error", headers: { "Content-Type": "application/json", "X-Relay-Bot": secret.botId, "X-Relay-Timestamp": timestamp, "X-Relay-Signature": `v1=${signature}` } }));
+      return await fetcher(new Request(url, { method: "POST", body: bytes, redirect: "error", headers: { "Content-Type": "application/json", "X-Tg-Support-Bot": secret.botId, "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}` } }));
     } catch { return null; }
   };
   return {
-    async send(events: readonly RelayEvent[]): Promise<SendResult> {
+    async send(events: readonly TgSupportEvent[]): Promise<SendResult> {
       const response = await post("events", { events: events.map(toWire) });
       return response ? result(response) : { kind: "retryable", reason: "network" };
     },
@@ -80,7 +80,7 @@ export function createServiceLink(config: RelayConfig, options: RelayOptions) {
       const host = validators.parse("HostRequest", parsed);
       if (!host.ok) return rejected(400);
       if (host.value.kind === "challenge") {
-        const response = hex(await hmac(await key, encoder.encode(`SR1-CHALLENGE\n${config.transport.hostUrl}\n${host.value.nonce}`)));
+        const response = hex(await hmac(await key, encoder.encode(`TGS1-CHALLENGE\n${config.transport.hostUrl}\n${host.value.nonce}`)));
         return { response: Response.json({ kind: "challenge", response }), commands: [] };
       }
       return { response: new Response(null, { status: 202 }), commands: commands(host.value.commands) };

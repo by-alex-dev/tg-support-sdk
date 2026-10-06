@@ -1,5 +1,5 @@
 import { ConfigError } from "./errors.ts";
-import type { BlobPurpose, Json, RelayKeys, TokenPurpose } from "./types.ts";
+import type { BlobPurpose, Json, TgSupportKeys, TokenPurpose } from "./types.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -38,7 +38,7 @@ export function importHmac(key: Uint8Array): Promise<CryptoKey> {
 export function generateKeys(): { tokenKey: string; sealKeys: string } {
   return { tokenKey: base64url(crypto.getRandomValues(new Uint8Array(32))), sealKeys: `${base64url(crypto.getRandomValues(new Uint8Array(3)))}:${base64url(crypto.getRandomValues(new Uint8Array(32)))}` };
 }
-export function parseKeys(input: { tokenKey: string; sealKeys: string }): RelayKeys {
+export function parseKeys(input: { tokenKey: string; sealKeys: string }): TgSupportKeys {
   try {
     const tokenKey = decode64(input.tokenKey);
     if (tokenKey.length !== 32) throw new ConfigError("TOKEN_KEY must contain 32 bytes.");
@@ -59,10 +59,10 @@ export function parseKeys(input: { tokenKey: string; sealKeys: string }): RelayK
     throw new ConfigError("Invalid host key encoding.");
   }
 }
-export function createKeyring(keys: RelayKeys, botId: number) {
+export function createKeyring(keys: TgSupportKeys, botId: number) {
   const tokenKey = importHmac(keys.tokenKey);
   const sealKeys = new Map(Object.entries(keys.seal.keys).map(([kid, bytes]) => [kid, crypto.subtle.importKey("raw", new Uint8Array(bytes), "AES-GCM", false, ["encrypt", "decrypt"])]));
-  const aad = (purpose: BlobPurpose, subject: string) => lp("SR1-SEAL", botId, purpose, decode64(subject));
+  const aad = (purpose: BlobPurpose, subject: string) => lp("TGS1-SEAL", botId, purpose, decode64(subject));
   return {
     async token(purpose: TokenPurpose | "event" | "notice", ...parts: readonly (string | number)[]): Promise<string> {
       return base64url(await hmac(await tokenKey, lp(purpose, ...parts)));

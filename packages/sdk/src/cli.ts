@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { configure, generateKeys } from "./index.ts";
 import { StartupError } from "./errors.ts";
-import type { RelayConfig } from "./types.ts";
+import type { TgSupportConfig } from "./types.ts";
 
 async function main(): Promise<void> {
   const [command, flag, argument, ...extra] = process.argv.slice(2);
@@ -14,11 +14,11 @@ async function main(): Promise<void> {
     console.log(`SEAL_KEYS=${keys.sealKeys}`);
     return;
   }
-  if (command !== "configure" || flag !== "--config" || !argument || extra.length) throw new Error("Usage: tg-support-sdk keys [--seal] | configure --config ./relay.config.mjs");
-  const module: { default?: RelayConfig & { botToken: string } } = await import(pathToFileURL(resolve(argument)).href);
+  if (command !== "configure" || flag !== "--config" || !argument || extra.length) throw new Error("Usage: tg-support-sdk keys [--seal] | configure --config ./tg-support.config.mjs");
+  const module: { default?: TgSupportConfig & { botToken: string } } = await import(pathToFileURL(resolve(argument)).href);
   if (!module.default) throw new Error("Config module must have a default export.");
   await configure(module.default);
-  console.log("Support Relay configuration registered.");
+  console.log("tg-support configuration registered.");
 }
 main().catch((error: unknown) => {
   console.error(error instanceof StartupError ? `Configuration failed: ${error.problems.join(", ")}` : "Configuration failed. Check the config module and host secrets.");
