@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createHmac, createDecipheriv } from "node:crypto";
+import { createHmac, createDecipheriv, createCipheriv } from "node:crypto";
 import { createWebTgSupport, configure, ServiceError } from "../src/index.ts";
 
 const config = {
@@ -64,6 +64,7 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   const now = 1700000000000;
   let configured;
   let nextThread = 55;
+  let returnedMessageId = 777;
   const options = { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "User" }), fetch: async (request) => {
     const path = new URL(request.url).pathname;
     const body = request.body ? await request.json() : null;
@@ -73,7 +74,7 @@ test("command authorization prevents another user's ciphertext reaching Telegram
     if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
     if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
     requests.push({ path, body });
-    return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: nextThread++ } : { message_id: 777 } });
+    return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: nextThread++ } : { message_id: returnedMessageId } });
   } };
   const tgSupport = createWebTgSupport(config, options);
   const message = (id) => ({ update_id: id, message: { message_id: 42, date: 1, chat: { id, type: "private" }, from: { id, is_bot: false, first_name: "User" }, text: "secret" } });
@@ -104,6 +105,87 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   const topic = await createTopic(own);
   const nextOwnTopic = await createTopic(own);
   const otherTopic = await createTopic(other);
+  const privateTextEdit = await tgSupport.normalize({ update_id: 890, edited_message: {
+    ...message(123456789).message, edit_date: 1, text: "Changed private text",
+  } });
+  const privateCaptionEdit = await tgSupport.normalize({ update_id: 891, edited_message: {
+    ...message(123456789).message, text: undefined, photo: [{ file_id: "photo" }], edit_date: 1, caption: "Changed caption",
+  } });
+  const groupChat = { sealed: configured.group_chat };
+  const privateChat = { sealed: own.chat };
+  const groupThread = { sealed: topic.threadId };
+  const bound = { ...command, binding: topic.binding };
+  returnedMessageId = 42;
+  const groupCopy = await tgSupport.execute({ ...bound, params: {
+    chat_id: groupChat, message_thread_id: groupThread, from_chat_id: privateChat, message_id: { sealed: own.messageId },
+  } });
+  assert.equal(groupCopy.outcome.kind, "success");
+  const header = await tgSupport.execute({ ...bound, method: "sendMessage", params: {
+    chat_id: groupChat, message_thread_id: groupThread,
+    text: { template: "topic_header", language: { sealed: own.language }, user: privateChat },
+  } });
+  assert.equal(header.outcome.kind, "success");
+  returnedMessageId = 777;
+  const groupCommands = (messageId) => [
+    ["copy source", "copyMessage", { chat_id: privateChat, from_chat_id: groupChat, message_id: messageId }],
+    ["text edit", "editMessageText", { chat_id: groupChat, message_id: messageId, content: { sealed: privateTextEdit.content } }],
+    ["caption edit", "editMessageCaption", { chat_id: groupChat, message_id: messageId, content: { sealed: privateCaptionEdit.content } }],
+    ["delete", "deleteMessage", { chat_id: groupChat, message_id: messageId }],
+    ["pin", "pinChatMessage", { chat_id: groupChat, message_id: messageId }],
+    ["reaction", "setMessageReaction", { chat_id: groupChat, message_id: messageId, reaction: "👀" }],
+    ["send reply", "sendMessage", { chat_id: groupChat, message_thread_id: groupThread,
+      text: { template: "user_edited", language: { sealed: own.language } }, reply_to_message_id: messageId }],
+    ["copy reply", "copyMessage", { chat_id: groupChat, message_thread_id: groupThread, from_chat_id: privateChat,
+      message_id: { sealed: own.messageId }, reply_to_message_id: messageId }],
+  ];
+  requests.length = 0;
+  for (const [slot, method, params] of groupCommands({ sealed: own.messageId })) {
+    const result = await tgSupport.execute({ ...bound, method, params });
+    assert.equal(result.outcome.kind, "rejected_by_host", `${slot}: private42 cannot select group42`);
+    assert.equal(result.outcome.reason, "blob_invalid", slot);
+  }
+  assert.deepEqual(requests, []);
+  for (const [slot, method, params] of groupCommands({ sealed: groupCopy.outcome.created.messageId })) {
+    const result = await tgSupport.execute({ ...bound, method, params });
+    assert.equal(result.outcome.kind, "success", `${slot}: group-created USER scope remains valid`);
+    assert.equal(requests.at(-1).body[method === "copyMessage" && slot === "copy source" ? "from_chat_id" : "chat_id"], config.supportGroupId);
+    assert.equal(slot.endsWith("reply") ? requests.at(-1).body.reply_parameters.message_id : requests.at(-1).body.message_id, 42);
+  }
+  assert.equal((await tgSupport.execute({ ...bound, method: "pinChatMessage", params: {
+    chat_id: groupChat, message_id: { sealed: header.outcome.created.messageId },
+  } })).outcome.kind, "success");
+  requests.length = 0;
+  for (const [slot, method, params] of groupCommands({ sealed: groupCopy.outcome.created.messageId })) {
+    const result = await tgSupport.execute({ ...bound, method, params: {
+      ...params, chat_id: privateChat, message_thread_id: undefined,
+      ...(slot === "copy source" ? { from_chat_id: privateChat } : {}),
+    } });
+    assert.equal(result.outcome.kind, "rejected_by_host", `${slot}: group42 cannot select private42`);
+    assert.equal(result.outcome.reason, "blob_invalid", slot);
+  }
+  assert.deepEqual(requests, []);
+  const sealMessagePayload = (payload) => {
+    const nonce = Buffer.alloc(12, 1);
+    const cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32), nonce);
+    const parts = [Buffer.from("TGS1-SEAL"), Buffer.from("12345"), Buffer.from("message_id"), Buffer.from(own.user, "base64url")];
+    cipher.setAAD(Buffer.concat(parts.flatMap((part) => {
+      const size = Buffer.alloc(4); size.writeUInt32BE(part.length); return [size, part];
+    })));
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload)), cipher.final(), cipher.getAuthTag()]);
+    return `s1.Ab3x.${nonce.toString("base64url")}.${encrypted.toString("base64url")}`;
+  };
+  for (const payload of [
+    { message_id: 42 },
+    { message_id: 42, chat_id: "123456789" },
+    { message_id: 42, chat_id: 9007199254740992 },
+  ]) {
+    const result = await tgSupport.execute({ ...command, method: "deleteMessage", params: {
+      chat_id: privateChat, message_id: { sealed: sealMessagePayload(payload) },
+    } });
+    assert.equal(result.outcome.kind, "rejected_by_host");
+    assert.equal(result.outcome.reason, "malformed");
+  }
+  assert.deepEqual(requests, []);
   const operator = await tgSupport.normalize({ update_id: 901, message: {
     message_id: 2001, message_thread_id: 55, chat: { id: config.supportGroupId, type: "supergroup" }, from: { id: 555, is_bot: false }, text: "Operator answer",
   } });

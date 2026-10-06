@@ -88,17 +88,18 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         if (binding?.kind === "topic" && opened.subject === binding.thread && await keys.token("thread", config.supportGroupId, checked.value.thread_id) !== binding.thread) throw new Rejected("binding_invalid");
         return checked.value.thread_id;
       };
-      const messageId = async (value: unknown, slot: string, fromGroup = false, replyThread: string | null = null): Promise<number> => {
+      const messageId = async (value: unknown, slot: string, expectedChatId: number, fromGroup = false, replyThread: string | null = null): Promise<number> => {
         const opened = await keys.open("message_id", subjects(slot, fromGroup, replyThread), sealed(value));
         if (!opened.ok) throw new Rejected(opened.error);
         const checked = validators.parse("MessageIdPayload", opened.value);
         if (!checked.ok) throw new Rejected("malformed");
+        if (checked.value.chat_id !== expectedChatId) throw new Rejected("blob_invalid");
         return checked.value.message_id;
       };
       const reply = async (threadId: number | undefined) => {
         if (params.reply_to_message_id == null) return {};
         const replyThread = chat.kind === "group" && threadId !== undefined ? await keys.token("thread", config.supportGroupId, threadId) : null;
-        return { reply_parameters: { message_id: await messageId(params.reply_to_message_id, "reply_to_message_id", false, replyThread) } };
+        return { reply_parameters: { message_id: await messageId(params.reply_to_message_id, "reply_to_message_id", chat.id, false, replyThread) } };
       };
       let templateId: TemplateId | null = null;
       const render = async (value: unknown, allowed: readonly TemplateId[]): Promise<FormattedText> => {
@@ -132,7 +133,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         case "unpinAllForumTopicMessages": { const id = await thread(true); if (id === undefined) throw new Rejected("malformed"); request = { method: "unpinAllForumTopicMessages", params: { chat_id: chat.id, message_thread_id: id } }; break; }
         case "copyMessage": {
           const id = await thread(chat.kind === "group"); const from = await address(params.from_chat_id);
-          request = { method: "copyMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), from_chat_id: from.id, message_id: await messageId(params.message_id, "message_id", from.kind === "group"), ...await reply(id) } }; break;
+          request = { method: "copyMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), from_chat_id: from.id, message_id: await messageId(params.message_id, "message_id", from.id, from.kind === "group"), ...await reply(id) } }; break;
         }
         case "sendMessage": {
           const id = await thread(chat.kind === "group");
@@ -143,25 +144,25 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
           request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...await reply(id) } }; break;
         }
         case "editMessageText": {
-          const id = await messageId(params.message_id, "message_id"); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
+          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
           const checked = validators.parse("TextEditPayload", opened.value); if (!checked.ok) throw new Rejected("malformed");
           const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; const preview = checked.value.link_preview_options ? jsonRecord(checked.value.link_preview_options) : null;
           if ((checked.value.entities && !entities) || (checked.value.link_preview_options && !preview)) throw new Rejected("malformed");
           request = { method: "editMessageText", params: { chat_id: chat.id, message_id: id, text: checked.value.text, ...(entities ? { entities } : {}), ...(preview ? { link_preview_options: preview } : {}) } }; break;
         }
         case "editMessageCaption": {
-          const id = await messageId(params.message_id, "message_id"); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
+          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
           const checked = validators.parse("CaptionEditPayload", opened.value); if (!checked.ok) throw new Rejected("malformed");
           const entities = checked.value.caption_entities ? jsonRecords(checked.value.caption_entities) : null; if (checked.value.caption_entities && !entities) throw new Rejected("malformed");
           request = { method: "editMessageCaption", params: { chat_id: chat.id, message_id: id, caption: checked.value.caption, ...(entities ? { caption_entities: entities } : {}), ...(typeof checked.value.show_caption_above_media === "boolean" ? { show_caption_above_media: checked.value.show_caption_above_media } : {}) } }; break;
         }
-        case "deleteMessage": request = { method: "deleteMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id") } }; break;
-        case "pinChatMessage": request = { method: "pinChatMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id"), ...(typeof params.disable_notification === "boolean" ? { disable_notification: params.disable_notification } : {}) } }; break;
+        case "deleteMessage": request = { method: "deleteMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id) } }; break;
+        case "pinChatMessage": request = { method: "pinChatMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id), ...(typeof params.disable_notification === "boolean" ? { disable_notification: params.disable_notification } : {}) } }; break;
         case "setMessageReaction": {
           let reaction: readonly Record<string, Json>[];
           if (params.reaction === "👀") reaction = [{ type: "emoji", emoji: "👀" }];
           else { const opened = await keys.open("reactions", subjects("reaction"), sealed(params.reaction)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("ReactionsPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const values = jsonRecords(checked.value.reaction); if (!values) throw new Rejected("malformed"); reaction = values; }
-          request = { method: "setMessageReaction", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id"), reaction } }; break;
+          request = { method: "setMessageReaction", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id), reaction } }; break;
         }
         default: { const exhaustive: never = command.method; throw new Error(exhaustive); }
       }
@@ -177,7 +178,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
       if (request.method === "sendMessage" || request.method === "copyMessage") {
         if (!response.messageId) return operationResult(command, { kind: "transport_error", description: "Telegram message response was malformed." });
         const token = await keys.token("message", chat.id, response.messageId);
-        return operationResult(command, { kind: "success", created: { kind: "message", message: token, messageId: await keys.seal("message_id", command.subject, { message_id: response.messageId }), binding: templateId === "new_user_notice" ? await keys.seal("binding", command.subject, { kind: "notice", notice: token, user: command.subject }) : null } });
+        return operationResult(command, { kind: "success", created: { kind: "message", message: token, messageId: await keys.seal("message_id", command.subject, { message_id: response.messageId, chat_id: chat.id }), binding: templateId === "new_user_notice" ? await keys.seal("binding", command.subject, { kind: "notice", notice: token, user: command.subject }) : null } });
       }
       return operationResult(command, { kind: "success", created: null });
     } catch (error) {
