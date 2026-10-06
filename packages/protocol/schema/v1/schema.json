@@ -1,0 +1,2003 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://support-relay.dev/protocol/v1/schema.json",
+  "title": "ProtocolV1",
+  "description": "Wire contracts from docs/design/protocol.md. Unknown fields are accepted and consumers use only documented fields. Command envelope validation precedes method authorization; method recipes and AEAD address checks are separate.",
+  "definitions": {
+    "Token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "title": "Token"
+    },
+    "SealedBlob": {
+      "type": "string",
+      "pattern": "^s1\\.[A-Za-z0-9_-]{4}\\.[A-Za-z0-9_-]{16}\\.[A-Za-z0-9_-]{22,}$",
+      "maxLength": 65536,
+      "title": "SealedBlob"
+    },
+    "EventId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_.:-]+$",
+      "title": "EventId"
+    },
+    "OpId": {
+      "type": "string",
+      "pattern": "^[0-9]{1,20}$",
+      "title": "OpId"
+    },
+    "AttemptToken": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$",
+      "title": "AttemptToken"
+    },
+    "DeadlineSeconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 600,
+      "title": "DeadlineSeconds"
+    },
+    "TokenPurpose": {
+      "type": "string",
+      "enum": [
+        "user",
+        "group",
+        "message",
+        "thread",
+        "profile"
+      ],
+      "title": "TokenPurpose"
+    },
+    "BlobPurpose": {
+      "type": "string",
+      "enum": [
+        "private_chat",
+        "group_chat",
+        "message_id",
+        "thread_id",
+        "language",
+        "edit_content",
+        "reactions",
+        "notice_text",
+        "binding"
+      ],
+      "title": "BlobPurpose"
+    },
+    "TemplateId": {
+      "type": "string",
+      "enum": [
+        "topic_title",
+        "topic_header",
+        "new_user_notice",
+        "notifications_topic_title",
+        "welcome_hint",
+        "user_edited",
+        "edited_by_support",
+        "replaced_by_support"
+      ],
+      "title": "TemplateId"
+    },
+    "Method": {
+      "type": "string",
+      "enum": [
+        "createForumTopic",
+        "editForumTopic",
+        "unpinAllForumTopicMessages",
+        "sendMessage",
+        "copyMessage",
+        "editMessageText",
+        "editMessageCaption",
+        "deleteMessage",
+        "setMessageReaction",
+        "pinChatMessage"
+      ],
+      "title": "Method"
+    },
+    "SealedRef": {
+      "type": "object",
+      "properties": {
+        "sealed": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "sealed"
+      ],
+      "additionalProperties": true,
+      "title": "SealedRef"
+    },
+    "TemplateRef": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string"
+        },
+        "language": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "user": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "template",
+        "language"
+      ],
+      "additionalProperties": true,
+      "title": "TemplateRef"
+    },
+    "ParamValue": {
+      "anyOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        {
+          "$ref": "#/definitions/SealedRef"
+        },
+        {
+          "$ref": "#/definitions/TemplateRef"
+        }
+      ],
+      "title": "ParamValue"
+    },
+    "Revision": {
+      "type": "object",
+      "properties": {
+        "edit_date": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "update_id": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "edit_date",
+        "update_id"
+      ],
+      "additionalProperties": true,
+      "title": "Revision"
+    },
+    "BotConfiguredEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "bot_configured"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "telegram_bot_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "group": {
+          "$ref": "#/definitions/Token"
+        },
+        "group_chat": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "notifications_topic": {
+              "type": "boolean"
+            },
+            "welcome_hint": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "notifications_topic",
+            "welcome_hint"
+          ],
+          "additionalProperties": true
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "push",
+            "pull"
+          ]
+        },
+        "host_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^https://"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deadline_seconds": {
+          "$ref": "#/definitions/DeadlineSeconds"
+        },
+        "sdk_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^/]+/[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "config_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "telegram_bot_id",
+        "group",
+        "group_chat",
+        "features",
+        "transport",
+        "host_url",
+        "deadline_seconds",
+        "sdk_version",
+        "config_revision"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transport": {
+                "const": "pull"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "host_url": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "transport": {
+                "const": "push"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "host_url": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "title": "BotConfiguredEvent"
+    },
+    "UserMessageEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "user_message"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        },
+        "chat": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "profile": {
+          "$ref": "#/definitions/Token"
+        },
+        "language": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Token"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "copyable": {
+          "type": "boolean"
+        },
+        "is_bot_command": {
+          "type": "boolean"
+        },
+        "is_start": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user",
+        "chat",
+        "profile",
+        "language",
+        "message",
+        "message_id",
+        "reply_to",
+        "copyable",
+        "is_bot_command",
+        "is_start"
+      ],
+      "additionalProperties": true,
+      "if": {
+        "properties": {
+          "is_start": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "is_bot_command": {
+            "const": true
+          }
+        }
+      },
+      "title": "UserMessageEvent"
+    },
+    "UserInteractionEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "user_interaction"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        },
+        "chat": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "profile": {
+          "$ref": "#/definitions/Token"
+        },
+        "language": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user",
+        "chat",
+        "profile",
+        "language"
+      ],
+      "additionalProperties": true,
+      "title": "UserInteractionEvent"
+    },
+    "UserEditEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "user_edit"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "revision": {
+          "$ref": "#/definitions/Revision"
+        },
+        "field": {
+          "type": "string",
+          "enum": [
+            "text",
+            "caption"
+          ]
+        },
+        "content": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user",
+        "message",
+        "revision",
+        "field",
+        "content"
+      ],
+      "additionalProperties": true,
+      "title": "UserEditEvent"
+    },
+    "UserReactionEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "user_reaction"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "reactions": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user",
+        "message",
+        "reactions"
+      ],
+      "additionalProperties": true,
+      "title": "UserReactionEvent"
+    },
+    "SupportMessageEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "support_message"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "group": {
+          "$ref": "#/definitions/Token"
+        },
+        "thread": {
+          "$ref": "#/definitions/Token"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Token"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reply_scoped_message_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedBlob"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "copyable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "group",
+        "thread",
+        "message",
+        "message_id",
+        "reply_to",
+        "reply_scoped_message_id",
+        "copyable"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reply_to": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reply_scoped_message_id": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reply_to": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reply_scoped_message_id": {
+                "$ref": "#/definitions/SealedBlob"
+              }
+            }
+          }
+        }
+      ],
+      "title": "SupportMessageEvent"
+    },
+    "SupportEditEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "support_edit"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "group": {
+          "$ref": "#/definitions/Token"
+        },
+        "thread": {
+          "$ref": "#/definitions/Token"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "revision": {
+          "$ref": "#/definitions/Revision"
+        },
+        "field": {
+          "type": "string",
+          "enum": [
+            "text",
+            "caption"
+          ]
+        },
+        "content": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "group",
+        "thread",
+        "message",
+        "revision",
+        "field",
+        "content"
+      ],
+      "additionalProperties": true,
+      "title": "SupportEditEvent"
+    },
+    "SupportReactionEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "support_reaction"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "group": {
+          "$ref": "#/definitions/Token"
+        },
+        "thread": {
+          "$ref": "#/definitions/Token"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "reactions": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "group",
+        "thread",
+        "message",
+        "reactions"
+      ],
+      "additionalProperties": true,
+      "title": "SupportReactionEvent"
+    },
+    "HostNoticeEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "host_notice"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        },
+        "chat": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "profile": {
+          "$ref": "#/definitions/Token"
+        },
+        "language": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "text": {
+          "$ref": "#/definitions/SealedBlob"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user",
+        "chat",
+        "profile",
+        "language",
+        "text"
+      ],
+      "additionalProperties": true,
+      "title": "HostNoticeEvent"
+    },
+    "UserForgetEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "user_forget"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "user"
+      ],
+      "additionalProperties": true,
+      "title": "UserForgetEvent"
+    },
+    "CreatedMessage": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "message"
+        },
+        "message": {
+          "$ref": "#/definitions/Token"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedBlob"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "message",
+        "message_id",
+        "binding"
+      ],
+      "additionalProperties": true,
+      "title": "CreatedMessage"
+    },
+    "CreatedTopic": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "topic"
+        },
+        "thread": {
+          "$ref": "#/definitions/Token"
+        },
+        "thread_id": {
+          "$ref": "#/definitions/SealedBlob"
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedBlob"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "thread",
+        "thread_id",
+        "binding"
+      ],
+      "additionalProperties": true,
+      "title": "CreatedTopic"
+    },
+    "Created": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/CreatedMessage"
+        },
+        {
+          "$ref": "#/definitions/CreatedTopic"
+        }
+      ],
+      "title": "Created"
+    },
+    "SuccessOutcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "success"
+        },
+        "created": {
+          "$ref": "#/definitions/Created"
+        }
+      },
+      "required": [
+        "kind",
+        "created"
+      ],
+      "additionalProperties": true,
+      "title": "SuccessOutcome"
+    },
+    "TelegramErrorOutcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "telegram_error"
+        },
+        "error_code": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "retry_after": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "error_code",
+        "description",
+        "retry_after"
+      ],
+      "additionalProperties": true,
+      "title": "TelegramErrorOutcome"
+    },
+    "TransportErrorOutcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "transport_error"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": true,
+      "title": "TransportErrorOutcome"
+    },
+    "HostRejectedOutcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "rejected_by_host"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "additionalProperties": true,
+      "title": "HostRejectedOutcome"
+    },
+    "Outcome": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/SuccessOutcome"
+        },
+        {
+          "$ref": "#/definitions/TelegramErrorOutcome"
+        },
+        {
+          "$ref": "#/definitions/TransportErrorOutcome"
+        },
+        {
+          "$ref": "#/definitions/HostRejectedOutcome"
+        }
+      ],
+      "title": "Outcome"
+    },
+    "OperationResultEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "operation_result"
+        },
+        "event_id": {
+          "$ref": "#/definitions/EventId"
+        },
+        "op_id": {
+          "$ref": "#/definitions/OpId"
+        },
+        "attempt_token": {
+          "$ref": "#/definitions/AttemptToken"
+        },
+        "outcome": {
+          "$ref": "#/definitions/Outcome"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "op_id",
+        "attempt_token",
+        "outcome"
+      ],
+      "additionalProperties": true,
+      "title": "OperationResultEvent"
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/BotConfiguredEvent"
+        },
+        {
+          "$ref": "#/definitions/UserMessageEvent"
+        },
+        {
+          "$ref": "#/definitions/UserInteractionEvent"
+        },
+        {
+          "$ref": "#/definitions/UserEditEvent"
+        },
+        {
+          "$ref": "#/definitions/UserReactionEvent"
+        },
+        {
+          "$ref": "#/definitions/SupportMessageEvent"
+        },
+        {
+          "$ref": "#/definitions/SupportEditEvent"
+        },
+        {
+          "$ref": "#/definitions/SupportReactionEvent"
+        },
+        {
+          "$ref": "#/definitions/HostNoticeEvent"
+        },
+        {
+          "$ref": "#/definitions/UserForgetEvent"
+        },
+        {
+          "$ref": "#/definitions/OperationResultEvent"
+        }
+      ],
+      "title": "Event"
+    },
+    "EventBatch": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/definitions/Event"
+          }
+        }
+      },
+      "required": [
+        "events"
+      ],
+      "additionalProperties": true,
+      "title": "EventBatch"
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "op_id": {
+          "$ref": "#/definitions/OpId"
+        },
+        "attempt_token": {
+          "$ref": "#/definitions/AttemptToken"
+        },
+        "deadline_seconds": {
+          "$ref": "#/definitions/DeadlineSeconds"
+        },
+        "subject": {
+          "$ref": "#/definitions/Token"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedBlob"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "op_id",
+        "attempt_token",
+        "deadline_seconds",
+        "subject",
+        "method",
+        "params",
+        "binding"
+      ],
+      "additionalProperties": true,
+      "title": "Command"
+    },
+    "PushEnvelope": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "commands"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/definitions/Command"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "commands"
+      ],
+      "additionalProperties": true,
+      "title": "PushEnvelope"
+    },
+    "ChallengeRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "challenge"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "nonce"
+      ],
+      "additionalProperties": true,
+      "title": "ChallengeRequest"
+    },
+    "ChallengeResponse": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "challenge"
+        },
+        "response": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "kind",
+        "response"
+      ],
+      "additionalProperties": true,
+      "title": "ChallengeResponse"
+    },
+    "HostRequest": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/PushEnvelope"
+        },
+        {
+          "$ref": "#/definitions/ChallengeRequest"
+        }
+      ],
+      "title": "HostRequest"
+    },
+    "ClaimRequest": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 50
+        }
+      },
+      "required": [],
+      "additionalProperties": true,
+      "title": "ClaimRequest"
+    },
+    "ClaimResponse": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/definitions/Command"
+          }
+        }
+      },
+      "required": [
+        "commands"
+      ],
+      "additionalProperties": true,
+      "title": "ClaimResponse"
+    },
+    "HeartbeatRequest": {
+      "type": "object",
+      "properties": {
+        "op_id": {
+          "$ref": "#/definitions/OpId"
+        },
+        "attempt_token": {
+          "$ref": "#/definitions/AttemptToken"
+        }
+      },
+      "required": [
+        "op_id",
+        "attempt_token"
+      ],
+      "additionalProperties": true,
+      "title": "HeartbeatRequest"
+    },
+    "HeartbeatResponse": {
+      "type": "object",
+      "properties": {
+        "extended": {
+          "const": true
+        },
+        "remaining_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "extended",
+        "remaining_seconds"
+      ],
+      "additionalProperties": true,
+      "title": "HeartbeatResponse"
+    },
+    "RejectResponse": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detail": {
+          "type": "string"
+        },
+        "accepted_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "min_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": true,
+      "title": "RejectResponse"
+    },
+    "TopicTitleRef": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": [
+            "topic_title"
+          ]
+        },
+        "language": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "user": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "template",
+        "language",
+        "user"
+      ],
+      "additionalProperties": true,
+      "title": "TopicTitleRef"
+    },
+    "NotificationsTitleRef": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "const": "notifications_topic_title"
+        },
+        "language": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "template",
+        "language"
+      ],
+      "additionalProperties": true,
+      "title": "NotificationsTitleRef"
+    },
+    "TopicNameRef": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/TopicTitleRef"
+        },
+        {
+          "$ref": "#/definitions/NotificationsTitleRef"
+        }
+      ],
+      "title": "TopicNameRef"
+    },
+    "TextTemplateRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "enum": [
+                "topic_header",
+                "new_user_notice"
+              ]
+            },
+            "language": {
+              "$ref": "#/definitions/SealedRef"
+            },
+            "user": {
+              "$ref": "#/definitions/SealedRef"
+            }
+          },
+          "required": [
+            "template",
+            "language",
+            "user"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "enum": [
+                "welcome_hint",
+                "user_edited",
+                "edited_by_support",
+                "replaced_by_support"
+              ]
+            },
+            "language": {
+              "$ref": "#/definitions/SealedRef"
+            }
+          },
+          "required": [
+            "template",
+            "language"
+          ],
+          "additionalProperties": true
+        }
+      ],
+      "title": "TextTemplateRef"
+    },
+    "TextRef": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SealedRef"
+        },
+        {
+          "$ref": "#/definitions/TextTemplateRef"
+        }
+      ],
+      "title": "TextRef"
+    },
+    "CreateForumTopicParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "name": {
+          "$ref": "#/definitions/TopicNameRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "name"
+      ],
+      "additionalProperties": true,
+      "title": "CreateForumTopicParams"
+    },
+    "EditForumTopicParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_thread_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "name": {
+          "$ref": "#/definitions/TopicTitleRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_thread_id",
+        "name"
+      ],
+      "additionalProperties": true,
+      "title": "EditForumTopicParams"
+    },
+    "UnpinAllForumTopicMessagesParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_thread_id": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_thread_id"
+      ],
+      "additionalProperties": true,
+      "title": "UnpinAllForumTopicMessagesParams"
+    },
+    "SendMessageParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_thread_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "$ref": "#/definitions/TextRef"
+        },
+        "reply_to_message_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "chat_id",
+        "text"
+      ],
+      "additionalProperties": true,
+      "title": "SendMessageParams"
+    },
+    "CopyMessageParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_thread_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from_chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "reply_to_message_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "chat_id",
+        "from_chat_id",
+        "message_id"
+      ],
+      "additionalProperties": true,
+      "title": "CopyMessageParams"
+    },
+    "EditMessageTextParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "content": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id",
+        "content"
+      ],
+      "additionalProperties": true,
+      "title": "EditMessageTextParams"
+    },
+    "EditMessageCaptionParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "content": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id",
+        "content"
+      ],
+      "additionalProperties": true,
+      "title": "EditMessageCaptionParams"
+    },
+    "DeleteMessageParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id"
+      ],
+      "additionalProperties": true,
+      "title": "DeleteMessageParams"
+    },
+    "SetMessageReactionParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "reaction": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SealedRef"
+            },
+            {
+              "const": "👀"
+            }
+          ]
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id",
+        "reaction"
+      ],
+      "additionalProperties": true,
+      "title": "SetMessageReactionParams"
+    },
+    "PinChatMessageParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "disable_notification": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id"
+      ],
+      "additionalProperties": true,
+      "title": "PinChatMessageParams"
+    },
+    "PrivateChatPayload": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "additionalProperties": true,
+      "title": "PrivateChatPayload"
+    },
+    "GroupChatPayload": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "additionalProperties": true,
+      "title": "GroupChatPayload"
+    },
+    "MessageIdPayload": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "additionalProperties": true,
+      "title": "MessageIdPayload"
+    },
+    "ThreadIdPayload": {
+      "type": "object",
+      "properties": {
+        "thread_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "thread_id"
+      ],
+      "additionalProperties": true,
+      "title": "ThreadIdPayload"
+    },
+    "LanguagePayload": {
+      "type": "object",
+      "properties": {
+        "language_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "language_code"
+      ],
+      "additionalProperties": true,
+      "title": "LanguagePayload"
+    },
+    "TopicBinding": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "topic"
+        },
+        "thread": {
+          "$ref": "#/definitions/Token"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        }
+      },
+      "required": [
+        "kind",
+        "thread",
+        "user"
+      ],
+      "additionalProperties": true,
+      "title": "TopicBinding"
+    },
+    "NoticeBinding": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "notice"
+        },
+        "notice": {
+          "$ref": "#/definitions/Token"
+        },
+        "user": {
+          "$ref": "#/definitions/Token"
+        }
+      },
+      "required": [
+        "kind",
+        "notice",
+        "user"
+      ],
+      "additionalProperties": true,
+      "title": "NoticeBinding"
+    },
+    "Binding": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/TopicBinding"
+        },
+        {
+          "$ref": "#/definitions/NoticeBinding"
+        }
+      ],
+      "title": "Binding"
+    },
+    "TextEditPayload": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "link_preview_options": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "field",
+        "text"
+      ],
+      "additionalProperties": true,
+      "title": "TextEditPayload"
+    },
+    "CaptionEditPayload": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "const": "caption"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "caption_entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "show_caption_above_media": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "field",
+        "caption"
+      ],
+      "additionalProperties": true,
+      "title": "CaptionEditPayload"
+    },
+    "EditContentPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/TextEditPayload"
+        },
+        {
+          "$ref": "#/definitions/CaptionEditPayload"
+        }
+      ],
+      "title": "EditContentPayload"
+    },
+    "ReactionsPayload": {
+      "type": "object",
+      "properties": {
+        "reaction": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "reaction"
+      ],
+      "additionalProperties": true,
+      "title": "ReactionsPayload"
+    },
+    "NoticeTextPayload": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": true,
+      "title": "NoticeTextPayload"
+    }
+  },
+  "x-method-catalog": {
+    "createForumTopic": {
+      "params": "CreateForumTopicParams",
+      "creates": "topic",
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat"
+          ]
+        },
+        "name": {
+          "kind": "template",
+          "templates": [
+            "topic_title",
+            "notifications_topic_title"
+          ]
+        }
+      }
+    },
+    "editForumTopic": {
+      "params": "EditForumTopicParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat"
+          ]
+        },
+        "message_thread_id": {
+          "kind": "sealed",
+          "purpose": "thread_id"
+        },
+        "name": {
+          "kind": "template",
+          "templates": [
+            "topic_title"
+          ]
+        }
+      }
+    },
+    "unpinAllForumTopicMessages": {
+      "params": "UnpinAllForumTopicMessagesParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat"
+          ]
+        },
+        "message_thread_id": {
+          "kind": "sealed",
+          "purpose": "thread_id"
+        }
+      }
+    },
+    "sendMessage": {
+      "params": "SendMessageParams",
+      "creates": "message",
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_thread_id": {
+          "kind": "sealed",
+          "purpose": "thread_id",
+          "optional": true
+        },
+        "text": {
+          "kind": "text",
+          "purpose": "notice_text",
+          "templates": [
+            "topic_header",
+            "new_user_notice",
+            "welcome_hint",
+            "user_edited",
+            "edited_by_support",
+            "replaced_by_support"
+          ]
+        },
+        "reply_to_message_id": {
+          "kind": "sealed",
+          "purpose": "message_id",
+          "optional": true
+        }
+      }
+    },
+    "copyMessage": {
+      "params": "CopyMessageParams",
+      "creates": "message",
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_thread_id": {
+          "kind": "sealed",
+          "purpose": "thread_id",
+          "optional": true
+        },
+        "from_chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        },
+        "reply_to_message_id": {
+          "kind": "sealed",
+          "purpose": "message_id",
+          "optional": true
+        }
+      }
+    },
+    "editMessageText": {
+      "params": "EditMessageTextParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        },
+        "content": {
+          "kind": "sealed",
+          "purpose": "edit_content",
+          "field": "text"
+        }
+      }
+    },
+    "editMessageCaption": {
+      "params": "EditMessageCaptionParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        },
+        "content": {
+          "kind": "sealed",
+          "purpose": "edit_content",
+          "field": "caption"
+        }
+      }
+    },
+    "deleteMessage": {
+      "params": "DeleteMessageParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        }
+      }
+    },
+    "setMessageReaction": {
+      "params": "SetMessageReactionParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        },
+        "reaction": {
+          "kind": "reaction",
+          "purpose": "reactions",
+          "open": "👀"
+        }
+      }
+    },
+    "pinChatMessage": {
+      "params": "PinChatMessageParams",
+      "creates": null,
+      "slots": {
+        "chat_id": {
+          "kind": "addressee",
+          "purposes": [
+            "group_chat",
+            "private_chat"
+          ]
+        },
+        "message_id": {
+          "kind": "sealed",
+          "purpose": "message_id"
+        },
+        "disable_notification": {
+          "kind": "open",
+          "optional": true
+        }
+      }
+    }
+  }
+}

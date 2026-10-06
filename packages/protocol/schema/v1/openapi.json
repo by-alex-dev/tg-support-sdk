@@ -1,0 +1,618 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Support Relay protocol",
+    "version": "1.0.0",
+    "description": "Asynchronous host/service protocol. Request HMAC covers SR1-REQ\\n<timestamp>\\nPOST\\n<path+query>\\n<raw body>; claim/heartbeat response HMAC covers SR1-RES\\n<timestamp>\\n<status>\\n<path+query>\\n<raw body>. Signature is v1=<lowercase hex HMAC-SHA256>; K is decoded third part of srs1.<bot_uuid>.<base64url_key>. Verify before parsing, within ±300 seconds. Unknown object fields are ignored. See docs/design/protocol.md for AEAD subjects, atomic batches, operation ordering and result correlation."
+  },
+  "servers": [
+    {
+      "url": "{baseUrl}",
+      "variables": {
+        "baseUrl": {
+          "default": "http://127.0.0.1:3000",
+          "description": "Absolute service base URL, including any deployment path prefix."
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/v1/events": {
+      "post": {
+        "security": [
+          {
+            "RelaySignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Relay-Bot",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Relay-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$"
+            }
+          }
+        ],
+        "operationId": "acceptEvents",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schema.json#/definitions/EventBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Batch durably accepted, including duplicates."
+          },
+          "400": {
+            "description": "Malformed/unknown event or result mismatch. Entire batch rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, timestamp or bot invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account/inactive bot; accepted_types can be resent separately.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Bot/config binding conflict or bot not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Implementation version below its configured minimum.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Open operation limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Transient service error; resend same event ids."
+          }
+        }
+      }
+    },
+    "/v1/commands/claim": {
+      "post": {
+        "security": [
+          {
+            "RelaySignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Relay-Bot",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Relay-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$"
+            }
+          }
+        ],
+        "operationId": "claimCommands",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schema.json#/definitions/ClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claimed commands. Empty for no work or frozen account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/ClaimResponse"
+                }
+              }
+            },
+            "headers": {
+              "X-Relay-Timestamp": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Relay-Signature": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account or inactive bot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Transient service error."
+          }
+        }
+      }
+    },
+    "/v1/heartbeat": {
+      "post": {
+        "security": [
+          {
+            "RelaySignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Relay-Bot",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Relay-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$"
+            }
+          }
+        ],
+        "operationId": "extendAttempt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schema.json#/definitions/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Extended by at most deadline, bounded by one hour from transfer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/HeartbeatResponse"
+                }
+              }
+            },
+            "headers": {
+              "X-Relay-Timestamp": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Relay-Signature": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Attempt no longer active.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Transient service error."
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "hostPush": {
+      "post": {
+        "security": [
+          {
+            "RelaySignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Relay-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$"
+            }
+          }
+        ],
+        "operationId": "receivePush",
+        "description": "POST to configured host_url. Verify against its configured path/query. A challenge response HMAC covers SR1-CHALLENGE\\n<host_url exactly as configured>\\n<nonce>. No commands reach a new URL before successful challenge. HTTPS only; prohibit service/private address ranges on each connection and redirects.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schema.json#/definitions/HostRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified challenge response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/ChallengeResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Commands accepted before asynchronous execution."
+          },
+          "400": {
+            "description": "Malformed host request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature/timestamp failed; execute nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schema.json#/definitions/RejectResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Host not initialized."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "RelaySignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Relay-Signature",
+        "description": "One or more v1=<64 lowercase hex HMAC> values separated by comma and space."
+      }
+    },
+    "schemas": {
+      "Token": {
+        "$ref": "./schema.json#/definitions/Token"
+      },
+      "SealedBlob": {
+        "$ref": "./schema.json#/definitions/SealedBlob"
+      },
+      "EventId": {
+        "$ref": "./schema.json#/definitions/EventId"
+      },
+      "OpId": {
+        "$ref": "./schema.json#/definitions/OpId"
+      },
+      "AttemptToken": {
+        "$ref": "./schema.json#/definitions/AttemptToken"
+      },
+      "DeadlineSeconds": {
+        "$ref": "./schema.json#/definitions/DeadlineSeconds"
+      },
+      "TokenPurpose": {
+        "$ref": "./schema.json#/definitions/TokenPurpose"
+      },
+      "BlobPurpose": {
+        "$ref": "./schema.json#/definitions/BlobPurpose"
+      },
+      "TemplateId": {
+        "$ref": "./schema.json#/definitions/TemplateId"
+      },
+      "Method": {
+        "$ref": "./schema.json#/definitions/Method"
+      },
+      "SealedRef": {
+        "$ref": "./schema.json#/definitions/SealedRef"
+      },
+      "TemplateRef": {
+        "$ref": "./schema.json#/definitions/TemplateRef"
+      },
+      "ParamValue": {
+        "$ref": "./schema.json#/definitions/ParamValue"
+      },
+      "Revision": {
+        "$ref": "./schema.json#/definitions/Revision"
+      },
+      "BotConfiguredEvent": {
+        "$ref": "./schema.json#/definitions/BotConfiguredEvent"
+      },
+      "UserMessageEvent": {
+        "$ref": "./schema.json#/definitions/UserMessageEvent"
+      },
+      "UserInteractionEvent": {
+        "$ref": "./schema.json#/definitions/UserInteractionEvent"
+      },
+      "UserEditEvent": {
+        "$ref": "./schema.json#/definitions/UserEditEvent"
+      },
+      "UserReactionEvent": {
+        "$ref": "./schema.json#/definitions/UserReactionEvent"
+      },
+      "SupportMessageEvent": {
+        "$ref": "./schema.json#/definitions/SupportMessageEvent"
+      },
+      "SupportEditEvent": {
+        "$ref": "./schema.json#/definitions/SupportEditEvent"
+      },
+      "SupportReactionEvent": {
+        "$ref": "./schema.json#/definitions/SupportReactionEvent"
+      },
+      "HostNoticeEvent": {
+        "$ref": "./schema.json#/definitions/HostNoticeEvent"
+      },
+      "UserForgetEvent": {
+        "$ref": "./schema.json#/definitions/UserForgetEvent"
+      },
+      "CreatedMessage": {
+        "$ref": "./schema.json#/definitions/CreatedMessage"
+      },
+      "CreatedTopic": {
+        "$ref": "./schema.json#/definitions/CreatedTopic"
+      },
+      "Created": {
+        "$ref": "./schema.json#/definitions/Created"
+      },
+      "SuccessOutcome": {
+        "$ref": "./schema.json#/definitions/SuccessOutcome"
+      },
+      "TelegramErrorOutcome": {
+        "$ref": "./schema.json#/definitions/TelegramErrorOutcome"
+      },
+      "TransportErrorOutcome": {
+        "$ref": "./schema.json#/definitions/TransportErrorOutcome"
+      },
+      "HostRejectedOutcome": {
+        "$ref": "./schema.json#/definitions/HostRejectedOutcome"
+      },
+      "Outcome": {
+        "$ref": "./schema.json#/definitions/Outcome"
+      },
+      "OperationResultEvent": {
+        "$ref": "./schema.json#/definitions/OperationResultEvent"
+      },
+      "Event": {
+        "$ref": "./schema.json#/definitions/Event"
+      },
+      "EventBatch": {
+        "$ref": "./schema.json#/definitions/EventBatch"
+      },
+      "Command": {
+        "$ref": "./schema.json#/definitions/Command"
+      },
+      "PushEnvelope": {
+        "$ref": "./schema.json#/definitions/PushEnvelope"
+      },
+      "ChallengeRequest": {
+        "$ref": "./schema.json#/definitions/ChallengeRequest"
+      },
+      "ChallengeResponse": {
+        "$ref": "./schema.json#/definitions/ChallengeResponse"
+      },
+      "HostRequest": {
+        "$ref": "./schema.json#/definitions/HostRequest"
+      },
+      "ClaimRequest": {
+        "$ref": "./schema.json#/definitions/ClaimRequest"
+      },
+      "ClaimResponse": {
+        "$ref": "./schema.json#/definitions/ClaimResponse"
+      },
+      "HeartbeatRequest": {
+        "$ref": "./schema.json#/definitions/HeartbeatRequest"
+      },
+      "HeartbeatResponse": {
+        "$ref": "./schema.json#/definitions/HeartbeatResponse"
+      },
+      "RejectResponse": {
+        "$ref": "./schema.json#/definitions/RejectResponse"
+      },
+      "TopicTitleRef": {
+        "$ref": "./schema.json#/definitions/TopicTitleRef"
+      },
+      "NotificationsTitleRef": {
+        "$ref": "./schema.json#/definitions/NotificationsTitleRef"
+      },
+      "TopicNameRef": {
+        "$ref": "./schema.json#/definitions/TopicNameRef"
+      },
+      "TextTemplateRef": {
+        "$ref": "./schema.json#/definitions/TextTemplateRef"
+      },
+      "TextRef": {
+        "$ref": "./schema.json#/definitions/TextRef"
+      },
+      "CreateForumTopicParams": {
+        "$ref": "./schema.json#/definitions/CreateForumTopicParams"
+      },
+      "EditForumTopicParams": {
+        "$ref": "./schema.json#/definitions/EditForumTopicParams"
+      },
+      "UnpinAllForumTopicMessagesParams": {
+        "$ref": "./schema.json#/definitions/UnpinAllForumTopicMessagesParams"
+      },
+      "SendMessageParams": {
+        "$ref": "./schema.json#/definitions/SendMessageParams"
+      },
+      "CopyMessageParams": {
+        "$ref": "./schema.json#/definitions/CopyMessageParams"
+      },
+      "EditMessageTextParams": {
+        "$ref": "./schema.json#/definitions/EditMessageTextParams"
+      },
+      "EditMessageCaptionParams": {
+        "$ref": "./schema.json#/definitions/EditMessageCaptionParams"
+      },
+      "DeleteMessageParams": {
+        "$ref": "./schema.json#/definitions/DeleteMessageParams"
+      },
+      "SetMessageReactionParams": {
+        "$ref": "./schema.json#/definitions/SetMessageReactionParams"
+      },
+      "PinChatMessageParams": {
+        "$ref": "./schema.json#/definitions/PinChatMessageParams"
+      },
+      "PrivateChatPayload": {
+        "$ref": "./schema.json#/definitions/PrivateChatPayload"
+      },
+      "GroupChatPayload": {
+        "$ref": "./schema.json#/definitions/GroupChatPayload"
+      },
+      "MessageIdPayload": {
+        "$ref": "./schema.json#/definitions/MessageIdPayload"
+      },
+      "ThreadIdPayload": {
+        "$ref": "./schema.json#/definitions/ThreadIdPayload"
+      },
+      "LanguagePayload": {
+        "$ref": "./schema.json#/definitions/LanguagePayload"
+      },
+      "TopicBinding": {
+        "$ref": "./schema.json#/definitions/TopicBinding"
+      },
+      "NoticeBinding": {
+        "$ref": "./schema.json#/definitions/NoticeBinding"
+      },
+      "Binding": {
+        "$ref": "./schema.json#/definitions/Binding"
+      },
+      "TextEditPayload": {
+        "$ref": "./schema.json#/definitions/TextEditPayload"
+      },
+      "CaptionEditPayload": {
+        "$ref": "./schema.json#/definitions/CaptionEditPayload"
+      },
+      "EditContentPayload": {
+        "$ref": "./schema.json#/definitions/EditContentPayload"
+      },
+      "ReactionsPayload": {
+        "$ref": "./schema.json#/definitions/ReactionsPayload"
+      },
+      "NoticeTextPayload": {
+        "$ref": "./schema.json#/definitions/NoticeTextPayload"
+      }
+    }
+  }
+}

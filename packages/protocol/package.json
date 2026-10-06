@@ -1,0 +1,45 @@
+{
+  "name": "@support-relay/protocol",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "files": [
+    "dist",
+    "schema"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/src/schemas.d.ts",
+      "default": "./dist/src/schemas.js"
+    },
+    "./validation": {
+      "types": "./dist/src/validation.d.ts",
+      "default": "./dist/src/validation.js"
+    },
+    "./browser-validation": {
+      "types": "./dist/src/browser-validation.d.ts",
+      "default": "./dist/src/browser-validation.js"
+    },
+    "./schema/v1/schema.json": "./schema/v1/schema.json",
+    "./schema/v1/openapi.json": "./schema/v1/openapi.json"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "build": "npm run generate && tsc -p tsconfig.json && node scripts/copy-runtime.mjs",
+    "typecheck": "npm run generate && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "json-schema-to-typescript": "16.0.0",
+    "typescript": "6.0.3"
+  }
+}
