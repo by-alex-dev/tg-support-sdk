@@ -90,7 +90,11 @@ The module's default export is the same configuration passed to `createWebTgSupp
 
 Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep old seal keys for stored blocks. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
 
-For a long-lived grammY host, install `grammy` and import the separate adapter:
+For a long-lived grammY host, install `grammy`.
+
+For a Node TypeScript host that checks dependency declarations (`skipLibCheck: false`), install `@types/node` and `@types/node-fetch@2` as development dependencies. grammY's Node declarations import `fs` and node-fetch 2, whose [upstream TypeScript instructions](https://github.com/node-fetch/node-fetch#typescript) require the separate v2 types. The main Web SDK entry does not need these packages or grammY.
+
+Import the separate adapter:
 
 ```ts
 import { Bot } from "grammy";
