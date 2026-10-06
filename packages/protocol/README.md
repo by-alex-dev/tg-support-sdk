@@ -9,9 +9,9 @@ authorization must still verify AEAD subjects, bindings, configured addressees,
 template slots and result consistency against the issued command.
 
 Import wire types and the browser-compatible method catalog from
-`@support-tgSupport/protocol`. Import schemas from `@support-tgSupport/protocol/schemas`
-or Node boundary validators from `@support-tgSupport/protocol/validation`.
-`@support-tgSupport/protocol/browser-validation` uses precompiled validators without
+`tg-support-protocol`. Import schemas from `tg-support-protocol/schemas`
+or Node boundary validators from `tg-support-protocol/validation`.
+`tg-support-protocol/browser-validation` uses precompiled validators without
 runtime code generation, Node built-ins or external runtime dependencies. The main export
 does not import Ajv or Node built-ins. JSON objects allow unknown fields;
 consumers assemble domain data and Telegram calls from documented fields only.
