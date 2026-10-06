@@ -1560,10 +1560,16 @@
       "properties": {
         "message_id": {
           "type": "integer"
+        },
+        "chat_id": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
         }
       },
       "required": [
-        "message_id"
+        "message_id",
+        "chat_id"
       ],
       "additionalProperties": true,
       "title": "MessageIdPayload"

@@ -7581,24 +7581,65 @@ function validate136(data, { instancePath = "", parentData, parentDataProperty, 
       }
       errors++;
     }
+    if (data.chat_id === void 0) {
+      const err1 = { instancePath, schemaPath: "#/required", keyword: "required", params: { missingProperty: "chat_id" }, message: "must have required property 'chat_id'" };
+      if (vErrors === null) {
+        vErrors = [err1];
+      } else {
+        vErrors.push(err1);
+      }
+      errors++;
+    }
     if (data.message_id !== void 0) {
       let data0 = data.message_id;
       if (!(typeof data0 == "number" && (!(data0 % 1) && !isNaN(data0)) && isFinite(data0))) {
-        const err1 = { instancePath: instancePath + "/message_id", schemaPath: "#/properties/message_id/type", keyword: "type", params: { type: "integer" }, message: "must be integer" };
+        const err2 = { instancePath: instancePath + "/message_id", schemaPath: "#/properties/message_id/type", keyword: "type", params: { type: "integer" }, message: "must be integer" };
         if (vErrors === null) {
-          vErrors = [err1];
+          vErrors = [err2];
         } else {
-          vErrors.push(err1);
+          vErrors.push(err2);
         }
         errors++;
       }
     }
+    if (data.chat_id !== void 0) {
+      let data1 = data.chat_id;
+      if (!(typeof data1 == "number" && (!(data1 % 1) && !isNaN(data1)) && isFinite(data1))) {
+        const err3 = { instancePath: instancePath + "/chat_id", schemaPath: "#/properties/chat_id/type", keyword: "type", params: { type: "integer" }, message: "must be integer" };
+        if (vErrors === null) {
+          vErrors = [err3];
+        } else {
+          vErrors.push(err3);
+        }
+        errors++;
+      }
+      if (typeof data1 == "number" && isFinite(data1)) {
+        if (data1 > 9007199254740991 || isNaN(data1)) {
+          const err4 = { instancePath: instancePath + "/chat_id", schemaPath: "#/properties/chat_id/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" };
+          if (vErrors === null) {
+            vErrors = [err4];
+          } else {
+            vErrors.push(err4);
+          }
+          errors++;
+        }
+        if (data1 < -9007199254740991 || isNaN(data1)) {
+          const err5 = { instancePath: instancePath + "/chat_id", schemaPath: "#/properties/chat_id/minimum", keyword: "minimum", params: { comparison: ">=", limit: -9007199254740991 }, message: "must be >= -9007199254740991" };
+          if (vErrors === null) {
+            vErrors = [err5];
+          } else {
+            vErrors.push(err5);
+          }
+          errors++;
+        }
+      }
+    }
   } else {
-    const err2 = { instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" }, message: "must be object" };
+    const err6 = { instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" }, message: "must be object" };
     if (vErrors === null) {
-      vErrors = [err2];
+      vErrors = [err6];
     } else {
-      vErrors.push(err2);
+      vErrors.push(err6);
     }
     errors++;
   }

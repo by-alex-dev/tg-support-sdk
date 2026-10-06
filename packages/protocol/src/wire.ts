@@ -654,6 +654,7 @@ export interface GroupChatPayload {
  */
 export interface MessageIdPayload {
   message_id: number;
+  chat_id: number;
   [k: string]: unknown | undefined;
 }
 /**
