@@ -72,8 +72,9 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         return { kind: "private", id: checked.value.chat_id };
       };
       const chat = await address(params.chat_id, command.method === "createForumTopic" || command.method === "editForumTopic" || command.method === "unpinAllForumTopicMessages");
-      const subjects = (slot: string, fromGroup = false): string[] => [command.subject,
-        ...(binding?.kind === "topic" && ["message_thread_id", "message_id", "content", "reaction"].includes(slot) ? [binding.thread] : []),
+      const subjects = (slot: string, fromGroup = false, replyThread: string | null = null): string[] => [command.subject,
+        ...(binding?.kind === "topic" && (["message_thread_id", "message_id", "content", "reaction"].includes(slot) ||
+          slot === "reply_to_message_id" && chat.kind === "group" && binding.thread === replyThread) ? [binding.thread] : []),
         ...(binding?.kind === "notice" && slot === "message_id" && fromGroup ? [binding.notice] : []),
         ...(slot === "message_thread_id" ? [groupToken] : [])];
       const thread = async (required: boolean): Promise<number | undefined> => {
@@ -87,14 +88,18 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         if (binding?.kind === "topic" && opened.subject === binding.thread && await keys.token("thread", config.supportGroupId, checked.value.thread_id) !== binding.thread) throw new Rejected("binding_invalid");
         return checked.value.thread_id;
       };
-      const messageId = async (value: unknown, slot: string, fromGroup = false): Promise<number> => {
-        const opened = await keys.open("message_id", subjects(slot, fromGroup), sealed(value));
+      const messageId = async (value: unknown, slot: string, fromGroup = false, replyThread: string | null = null): Promise<number> => {
+        const opened = await keys.open("message_id", subjects(slot, fromGroup, replyThread), sealed(value));
         if (!opened.ok) throw new Rejected(opened.error);
         const checked = validators.parse("MessageIdPayload", opened.value);
         if (!checked.ok) throw new Rejected("malformed");
         return checked.value.message_id;
       };
-      const reply = async () => params.reply_to_message_id == null ? {} : { reply_parameters: { message_id: await messageId(params.reply_to_message_id, "reply_to_message_id") } };
+      const reply = async (threadId: number | undefined) => {
+        if (params.reply_to_message_id == null) return {};
+        const replyThread = chat.kind === "group" && threadId !== undefined ? await keys.token("thread", config.supportGroupId, threadId) : null;
+        return { reply_parameters: { message_id: await messageId(params.reply_to_message_id, "reply_to_message_id", false, replyThread) } };
+      };
       let templateId: TemplateId | null = null;
       const render = async (value: unknown, allowed: readonly TemplateId[]): Promise<FormattedText> => {
         const ref = record(value);
@@ -127,7 +132,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         case "unpinAllForumTopicMessages": { const id = await thread(true); if (id === undefined) throw new Rejected("malformed"); request = { method: "unpinAllForumTopicMessages", params: { chat_id: chat.id, message_thread_id: id } }; break; }
         case "copyMessage": {
           const id = await thread(chat.kind === "group"); const from = await address(params.from_chat_id);
-          request = { method: "copyMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), from_chat_id: from.id, message_id: await messageId(params.message_id, "message_id", from.kind === "group"), ...await reply() } }; break;
+          request = { method: "copyMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), from_chat_id: from.id, message_id: await messageId(params.message_id, "message_id", from.kind === "group"), ...await reply(id) } }; break;
         }
         case "sendMessage": {
           const id = await thread(chat.kind === "group");
@@ -135,7 +140,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
           const ref = record(params.text);
           if (ref?.sealed) { const opened = await keys.open("notice_text", [command.subject], sealed(params.text)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("NoticeTextPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; if (checked.value.entities && !entities) throw new Rejected("malformed"); text = { text: checked.value.text, ...(entities ? { entities } : {}) }; }
           else text = await render(params.text, ["topic_header", "new_user_notice", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"]);
-          request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...await reply() } }; break;
+          request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...await reply(id) } }; break;
         }
         case "editMessageText": {
           const id = await messageId(params.message_id, "message_id"); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);

@@ -62,10 +62,20 @@ test("claim rejects an unauthenticated response rather than treating it as an em
 test("command authorization prevents another user's ciphertext reaching Telegram and ignores extra Bot API fields", async () => {
   const requests = [];
   const now = 1700000000000;
-  const tgSupport = createWebTgSupport(config, { clock: { now: () => now }, fetch: async (request) => {
-    requests.push({ path: new URL(request.url).pathname, body: await request.json() });
-    return Response.json({ ok: true, result: { message_id: 777 } });
-  } });
+  let configured;
+  let nextThread = 55;
+  const options = { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "User" }), fetch: async (request) => {
+    const path = new URL(request.url).pathname;
+    const body = request.body ? await request.json() : null;
+    const method = path.split("/").at(-1);
+    if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
+    if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, username: "test_bot", is_bot: true } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    requests.push({ path, body });
+    return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: nextThread++ } : { message_id: 777 } });
+  } };
+  const tgSupport = createWebTgSupport(config, options);
   const message = (id) => ({ update_id: id, message: { message_id: 42, date: 1, chat: { id, type: "private" }, from: { id, is_bot: false, first_name: "User" }, text: "secret" } });
   const own = await tgSupport.normalize(message(123456789));
   const other = await tgSupport.normalize(message(987654321));
@@ -81,6 +91,56 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   requests.length = 0;
   assert.equal(await tgSupport.execute({ ...command, attemptToken: "cccccccccccccccccccccg", expiresAt: now }), null);
   assert.deepEqual(requests, []);
+
+  await configure(config, options);
+  const createTopic = async (user) => {
+    const result = await tgSupport.execute({ ...command, subject: user.user, method: "createForumTopic", params: {
+      chat_id: { sealed: configured.group_chat }, name: { template: "topic_title", language: { sealed: user.language }, user: { sealed: user.chat } },
+    } });
+    assert.equal(result.outcome.kind, "success");
+    assert.equal(result.outcome.created.kind, "topic");
+    return result.outcome.created;
+  };
+  const topic = await createTopic(own);
+  const nextOwnTopic = await createTopic(own);
+  const otherTopic = await createTopic(other);
+  const operator = await tgSupport.normalize({ update_id: 901, message: {
+    message_id: 2001, message_thread_id: 55, chat: { id: config.supportGroupId, type: "supergroup" }, from: { id: 555, is_bot: false }, text: "Operator answer",
+  } });
+  const elsewhere = await tgSupport.normalize({ update_id: 902, message: {
+    message_id: 2002, message_thread_id: 56, chat: { id: config.supportGroupId, type: "supergroup" }, from: { id: 555, is_bot: false }, text: "Another topic",
+  } });
+  const delivered = await tgSupport.execute({ ...command, binding: topic.binding, params: {
+    chat_id: { sealed: own.chat }, from_chat_id: { sealed: configured.group_chat }, message_id: { sealed: operator.messageId },
+  } });
+  assert.equal(delivered.outcome.kind, "success");
+  const userReply = await tgSupport.normalize({ update_id: 903, message: {
+    message_id: 43, reply_to_message: { message_id: 777 }, chat: { id: 123456789, type: "private" }, from: { id: 123456789, is_bot: false }, text: "Reply to the operator",
+  } });
+  assert.equal(userReply.replyTo, delivered.outcome.created.message);
+  const reply = { ...command, subject: userReply.user, binding: topic.binding, params: {
+    chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: topic.threadId }, from_chat_id: { sealed: userReply.chat },
+    message_id: { sealed: userReply.messageId }, reply_to_message_id: { sealed: operator.messageId },
+  } };
+  requests.length = 0;
+  for (const [invalid, reason] of [
+    [{ ...reply, binding: null }, "blob_invalid"],
+    [{ ...reply, binding: otherTopic.binding }, "binding_invalid"],
+    [{ ...reply, params: { ...reply.params, message_id: { sealed: other.messageId } } }, "blob_invalid"],
+    [{ ...reply, params: { ...reply.params, reply_to_message_id: { sealed: other.messageId } } }, "blob_invalid"],
+    [{ ...reply, params: { ...reply.params, reply_to_message_id: { sealed: elsewhere.messageId } } }, "blob_invalid"],
+    [{ ...reply, params: { ...reply.params, message_thread_id: { sealed: nextOwnTopic.threadId } } }, "blob_invalid"],
+    [{ ...reply, params: { ...reply.params, chat_id: { sealed: own.chat }, message_thread_id: null } }, "blob_invalid"],
+  ]) {
+    const result = await tgSupport.execute(invalid);
+    assert.equal(result.outcome.kind, "rejected_by_host");
+    assert.equal(result.outcome.reason, reason);
+  }
+  assert.deepEqual(requests, []);
+  assert.equal((await tgSupport.execute(reply)).outcome.kind, "success");
+  assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/copyMessage", body: {
+    chat_id: config.supportGroupId, message_thread_id: 55, from_chat_id: 123456789, message_id: 43, reply_parameters: { message_id: 2001 },
+  } }]);
 });
 
 test("unknown and wrong-slot template IDs are rejected without reaching Telegram", async () => {
