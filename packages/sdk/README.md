@@ -70,6 +70,12 @@ The lower-level interface also exposes `normalize`, `hostNotice`, `userForget`, 
 
 For a support reply, `replyScopedMessageId` contains the current operator message ID sealed under the replied-to message token. A notice binding authorizes that notice's scope and user; the message being copied is the operator's reply, which has its own distinct ID.
 
+Edited messages preserve text or caption, Telegram entities, link-preview options and caption position in sealed content. A media edit without the optional caption becomes an empty caption, so removing a caption also reaches the copy. Each edit reports its `(editDate, updateId)` revision; the Service selects the latest revision and handles replacement when Telegram can no longer edit the copy. Telegram error codes and descriptions remain available in the operation result for that decision.
+
+Private and support reaction updates carry the complete new list in a sealed block. An empty list removes reactions from the paired message. Commands accept sealed reactions or the delivery marker `👀`; other open reaction values are rejected. Support reaction events identify the group and message without a topic field, because Telegram does not include a topic ID in these updates.
+
+Support edits and reactions seal their content under the source message token. Commands consuming them provide `source_message_id`: the sealed ID already stored for the group side of the message pair. A THREAD- or notice-scoped source ID also requires its existing topic or notice binding. The SDK authenticates this proof for the command's user, checks its group chat and opens content only for that message; the target message ID is checked against the destination chat separately. Private USER-scoped content omits `source_message_id`.
+
 Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; preserve keys needed by queued commands and stored blobs.
 
 Run deployment configuration explicitly:

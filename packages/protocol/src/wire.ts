@@ -304,7 +304,6 @@ export interface SupportReactionEvent {
   type: "support_reaction";
   event_id: EventId;
   group: Token;
-  thread: Token;
   message: Token;
   reactions: SealedBlob;
   [k: string]: unknown | undefined;
@@ -590,6 +589,7 @@ export interface CopyMessageParams {
 export interface EditMessageTextParams {
   chat_id: SealedRef;
   message_id: SealedRef;
+  source_message_id?: SealedRef;
   content: SealedRef;
   [k: string]: unknown | undefined;
 }
@@ -600,6 +600,7 @@ export interface EditMessageTextParams {
 export interface EditMessageCaptionParams {
   chat_id: SealedRef;
   message_id: SealedRef;
+  source_message_id?: SealedRef;
   content: SealedRef;
   [k: string]: unknown | undefined;
 }
@@ -619,6 +620,7 @@ export interface DeleteMessageParams {
 export interface SetMessageReactionParams {
   chat_id: SealedRef;
   message_id: SealedRef;
+  source_message_id?: SealedRef;
   reaction: SealedRef | "👀";
   [k: string]: unknown | undefined;
 }

@@ -141,6 +141,11 @@ export const METHOD_CATALOG = {
         "kind": "sealed",
         "purpose": "message_id"
       },
+      "source_message_id": {
+        "kind": "sealed",
+        "purpose": "message_id",
+        "optional": true
+      },
       "content": {
         "kind": "sealed",
         "purpose": "edit_content",
@@ -162,6 +167,11 @@ export const METHOD_CATALOG = {
       "message_id": {
         "kind": "sealed",
         "purpose": "message_id"
+      },
+      "source_message_id": {
+        "kind": "sealed",
+        "purpose": "message_id",
+        "optional": true
       },
       "content": {
         "kind": "sealed",
@@ -201,6 +211,11 @@ export const METHOD_CATALOG = {
       "message_id": {
         "kind": "sealed",
         "purpose": "message_id"
+      },
+      "source_message_id": {
+        "kind": "sealed",
+        "purpose": "message_id",
+        "optional": true
       },
       "reaction": {
         "kind": "reaction",
