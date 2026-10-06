@@ -23,8 +23,23 @@ export function createExecutor(config: RelayConfig, keys: Keyring, botApi: BotAp
       const wire = { op_id: command.opId, attempt_token: command.attemptToken, deadline_seconds: command.deadlineSeconds, subject: command.subject, method: command.method, params: command.params, binding: command.binding };
       if (!validators.parse("Command", wire).ok || !Number.isFinite(command.receivedAt) || !Number.isFinite(command.expiresAt)) throw new Rejected("malformed");
       if (!isMethod(command.method)) throw new Rejected("method_not_allowed");
-      const parsed = validators.params(command.method, command.params);
-      if (!parsed.ok) throw new Rejected("malformed");
+      const method = command.method;
+      const parsed = validators.params(method, command.params);
+      if (!parsed.ok) {
+        const parameters = record(command.params);
+        for (const slot of ["name", "text"]) {
+          const reference = record(parameters?.[slot]);
+          if (typeof reference?.template !== "string") continue;
+          const allowedIds = parsed.errors.flatMap<unknown>((error) => {
+            if (error.instancePath !== `/${slot}/template`) return [];
+            if (error.keyword === "const") return [error.params.allowedValue];
+            const values: unknown = error.params.allowedValues;
+            return error.keyword === "enum" && Array.isArray(values) ? values : [];
+          }).filter((id): id is string => typeof id === "string");
+          if (!allowedIds.includes(reference.template) && allowedIds.some((template) => validators.params(method, { ...parameters, [slot]: { ...reference, template } }).ok)) throw new Rejected("unknown_template");
+        }
+        throw new Rejected("malformed");
+      }
       const params = parsed.value;
       const groupToken = await keys.token("group", config.supportGroupId);
       let binding: Binding | null = null;

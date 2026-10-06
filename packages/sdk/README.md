@@ -28,12 +28,12 @@ For another Telegram client, `createRelay({ config, telegramBotId, botApi, ...op
 
 The lower-level interface also exposes `normalize`, `hostNotice`, `userForget`, `send`, `receivePush`, `execute`, `claim` and `heartbeat`. `send` returns `accepted`, `retryable` or `fatal`; `claim` throws `ServiceError` with that structured failure result. Callers using these lower-level methods own retries and scheduling. The Web façade registers each attempt's execution once when it accepts a command batch.
 
-Generate keys explicitly with `npx support-relay keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx support-relay keys --seal` creates another seal entry. Add it before existing entries when rotating; preserve keys needed by queued commands and stored blobs.
+Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; preserve keys needed by queued commands and stored blobs.
 
 Run deployment configuration explicitly:
 
 ```sh
-npx support-relay configure --config ./relay-config.mjs
+npx tg-support-sdk configure --config ./relay-config.mjs
 ```
 
 The module's default export is the same configuration passed to `createWebRelay`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator/topic permissions, then sends `bot_configured` to the service. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.

@@ -83,6 +83,29 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   assert.deepEqual(requests, []);
 });
 
+test("unknown and wrong-slot template IDs are rejected without reaching Telegram", async () => {
+  const requests = [];
+  const now = 1700000000000;
+  const relay = createWebRelay(config, { clock: { now: () => now }, fetch: async (request) => {
+    requests.push(request);
+    throw new Error("Unexpected Telegram request");
+  } });
+  const event = await relay.normalize({ update_id: 2, message: { message_id: 42, chat: { id: 123456789, type: "private" }, from: { id: 123456789, is_bot: false, first_name: "User", language_code: "ru" }, text: "secret" } });
+  const command = { opId: "1", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: event.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000, method: "sendMessage" };
+  const reference = { language: { sealed: event.language }, user: { sealed: event.chat } };
+  for (const [text, reason] of [
+    [{ template: "unknown_template_id", ...reference }, "unknown_template"],
+    [{ template: "topic_title", ...reference }, "unknown_template"],
+    [{ template: 42, ...reference }, "malformed"],
+    [{ template: "unknown_template_id", user: reference.user }, "malformed"],
+  ]) {
+    const result = await relay.execute({ ...command, params: { chat_id: { sealed: event.chat }, text } });
+    assert.equal(result.outcome.kind, "rejected_by_host");
+    assert.equal(result.outcome.reason, reason);
+  }
+  assert.deepEqual(requests, []);
+});
+
 test("explicit configuration and execution preserve profile topic tags and the pinned-header mention", async () => {
   const seen = [];
   let configured;
