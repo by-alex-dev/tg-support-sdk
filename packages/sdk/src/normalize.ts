@@ -69,7 +69,7 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
     async userForget(userId: number): Promise<TgSupportEvent> { return { type: "user_forget", eventId: crypto.randomUUID(), user: await keys.token("user", userId) }; },
     async botConfigured(): Promise<TgSupportEvent> {
       const group = await keys.token("group", config.supportGroupId);
-      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: "tg-support-sdk/0.3.1", configRevision: config.configRevision };
+      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: "tg-support-sdk/0.4.0", configRevision: config.configRevision };
     },
   };
 }
