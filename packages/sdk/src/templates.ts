@@ -1,13 +1,15 @@
 import type { FormattedText, TemplateId, TemplateConfig, TelegramUserProfile } from "./types.ts";
 
-export function renderTemplate(id: TemplateId, code: string | null, profile: TelegramUserProfile | null, config?: TemplateConfig, userId?: number): FormattedText {
+export function renderTemplate(id: TemplateId, code: string | null, profile: TelegramUserProfile | null, config?: TemplateConfig, verifiedUserId: number | null = null): FormattedText {
   const languages = config?.languages ?? ["ru", "en"];
   const fallback = config?.fallback ?? "en";
   const requested = code?.toLowerCase() ?? "";
-  const language = languages.find((item) => item === requested) ?? languages.find((item) => item === requested.split("-")[0]) ?? fallback;
-  const override = config?.overrides?.[id]?.[language];
+  const requestedLanguage = languages.find((item) => item === requested) ?? languages.find((item) => item === requested.split("-")[0]) ?? fallback;
+  const translations = config?.overrides?.[id];
+  const language = translations?.[requestedLanguage] || !translations?.[fallback] ? requestedLanguage : fallback;
+  const override = translations?.[language];
   let rendered: FormattedText;
-  if (override) rendered = override({ profile, language });
+  if (override) rendered = override({ profile, language, verifiedUserId });
   else {
     const fullName = [profile?.firstName, profile?.lastName].filter((part) => part && part.trim() !== "").join(" ");
     const name = fullName || (profile?.username ? `@${profile.username}` : "");
@@ -21,12 +23,12 @@ export function renderTemplate(id: TemplateId, code: string | null, profile: Tel
       user_edited: "✏️ The user edited this message.", edited_by_support: "✏️ The message above was edited by support.", replaced_by_support: "🔁 The previous message could not be edited, so we deleted it and sent a new one.",
     };
     rendered = { text: texts[id] };
-    if (id === "topic_title" && userId !== undefined) rendered = { text: [name || null, `(#u${userId})`].filter((part) => part !== null).join(" • ") };
-    if ((id === "topic_header" || id === "new_user_notice") && userId !== undefined) {
-      const label = texts[id]; const prefix = fullName ? `${label} ` : `${label} 👤 `; const linked = fullName || String(userId);
-      const tail = [profile?.username ? `@${profile.username}` : null, `(#u${userId})`].filter((part) => part !== null).join(" ");
+    if (id === "topic_title" && verifiedUserId !== null) rendered = { text: [name || null, `(#u${verifiedUserId})`].filter((part) => part !== null).join(" • ") };
+    if ((id === "topic_header" || id === "new_user_notice") && verifiedUserId !== null) {
+      const label = texts[id]; const prefix = fullName ? `${label} ` : `${label} 👤 `; const linked = fullName || String(verifiedUserId);
+      const tail = [profile?.username ? `@${profile.username}` : null, `(#u${verifiedUserId})`].filter((part) => part !== null).join(" ");
       const instruction = id === "topic_header" ? language === "ru" ? "Пишите в этой теме, и пользователь получит ответ в своём чате с ботом." : "Write in this topic and the user will receive your reply in their chat with the bot." : language === "ru" ? "Чтобы написать пользователю, ответьте на это сообщение." : "Reply to this message to contact the user.";
-      rendered = { text: `${prefix}${linked} ${tail}\n\n${instruction}`, entities: [{ type: "text_link", offset: prefix.length, length: linked.length, url: `tg://user?id=${userId}` }] };
+      rendered = { text: `${prefix}${linked} ${tail}\n\n${instruction}`, entities: [{ type: "text_link", offset: prefix.length, length: linked.length, url: `tg://user?id=${verifiedUserId}` }] };
     }
   }
   return id === "topic_title" ? { ...rendered, text: Array.from(rendered.text).slice(0, 128).join("") } : rendered;

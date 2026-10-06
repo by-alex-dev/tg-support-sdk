@@ -92,7 +92,6 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         if (!opened.ok) throw new Rejected(opened.error);
         const checked = validators.parse("MessageIdPayload", opened.value);
         if (!checked.ok) throw new Rejected("malformed");
-        if (binding?.kind === "notice" && opened.subject === binding.notice && await keys.token("message", config.supportGroupId, checked.value.message_id) !== binding.notice) throw new Rejected("binding_invalid");
         return checked.value.message_id;
       };
       const reply = async () => params.reply_to_message_id == null ? {} : { reply_parameters: { message_id: await messageId(params.reply_to_message_id, "reply_to_message_id") } };
@@ -106,20 +105,20 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         const languageValue = validators.parse("LanguagePayload", language.value);
         if (!languageValue.ok) throw new Rejected("malformed");
         let profile = null;
-        let userId: number | undefined;
+        let verifiedUserId: number | null = null;
         const needsProfile = id !== undefined && ["topic_title", "topic_header", "new_user_notice"].includes(id);
         if (needsProfile || (id === undefined && ref.user !== undefined)) {
           const user = await address(ref.user);
           if (user.kind !== "private") throw new Rejected("addressee_not_allowed");
-          userId = user.id;
+          verifiedUserId = user.id;
         }
         if (!id) throw new Rejected("unknown_template");
         templateId = id;
-        if (needsProfile && userId !== undefined) {
-          if (options.resolveProfile) profile = await options.resolveProfile(userId);
-          else { const response = await botApi.getProfile({ method: "getChat", chatId: userId }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
+        if (needsProfile && verifiedUserId !== null) {
+          if (options.resolveProfile) profile = await options.resolveProfile(verifiedUserId);
+          else { const response = await botApi.getProfile({ method: "getChat", chatId: verifiedUserId }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
         }
-        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, userId);
+        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, verifiedUserId);
       };
       let request: TelegramRequest;
       switch (command.method) {

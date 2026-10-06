@@ -137,3 +137,128 @@ test("explicit configuration and execution preserve profile topic tags and the p
   assert.equal(seen[1].body.entities[0].url, "tg://user?id=123456789");
   assert.equal(seen[1].body.text.includes("Changed @current (#u123456789)"), true);
 });
+
+test("a notice reply copies the operator message to its user and topic while preserving notice and user binding", async () => {
+  const now = 1700000000000;
+  const seen = [];
+  let configured;
+  let threadId = 55;
+  let noticeId = 700;
+  const options = { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "User" }), fetch: async (request) => {
+    const method = new URL(request.url).pathname.split("/").at(-1);
+    const body = await request.json();
+    if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
+    if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    seen.push({ method, body });
+    if (method === "createForumTopic") return Response.json({ ok: true, result: { message_thread_id: threadId++ } });
+    if (method === "sendMessage") { const message_id = noticeId; noticeId += 10; return Response.json({ ok: true, result: { message_id } }); }
+    return Response.json({ ok: true, result: { message_id: 900 } });
+  } };
+  const enabled = { ...config, features: { ...config.features, notificationsTopic: true } };
+  await configure(enabled, options);
+  const tgSupport = createWebTgSupport(enabled, options);
+  const user = async (id) => tgSupport.normalize({ update_id: id, message: {
+    message_id: 10, chat: { id, type: "private" }, from: { id, is_bot: false, first_name: "User", language_code: "ru" }, text: "Help",
+  } });
+  const own = await user(123456789);
+  const other = await user(987654321);
+  const common = { opId: "20", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: own.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000 };
+  const reference = (event) => ({ language: { sealed: event.language }, user: { sealed: event.chat } });
+  const topic = await tgSupport.execute({ ...common, method: "createForumTopic", params: {
+    chat_id: { sealed: configured.group_chat }, name: { template: "topic_title", ...reference(own) },
+  } });
+  assert.equal(topic.outcome.kind, "success", JSON.stringify(topic.outcome));
+  const notifications = await tgSupport.execute({ ...common, method: "createForumTopic", params: {
+    chat_id: { sealed: configured.group_chat }, name: { template: "notifications_topic_title", language: { sealed: own.language } },
+  } });
+  assert.equal(notifications.outcome.kind, "success", JSON.stringify(notifications.outcome));
+  const notice = async (event) => tgSupport.execute({ ...common, subject: event.user, method: "sendMessage", params: {
+    chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: notifications.outcome.created.threadId },
+    text: { template: "new_user_notice", ...reference(event) },
+  } });
+  const notified = await notice(own);
+  assert.equal(notified.outcome.kind, "success");
+  const reply = await tgSupport.normalize({ update_id: 999, message: {
+    message_id: 701, message_thread_id: 56, chat: { id: config.supportGroupId, type: "supergroup" },
+    from: { id: 555, is_bot: false }, reply_to_message: { message_id: 700 }, text: "Operator answer",
+  } });
+  assert.equal(reply.type, "support_message");
+  assert.equal(reply.replyTo, notified.outcome.created.message);
+  const command = { ...common, binding: notified.outcome.created.binding, method: "copyMessage", params: {
+    chat_id: { sealed: own.chat }, from_chat_id: { sealed: configured.group_chat }, message_id: { sealed: reply.replyScopedMessageId },
+  } };
+  assert.equal((await tgSupport.execute(command)).outcome.kind, "success");
+  assert.equal((await tgSupport.execute({ ...command, params: { ...command.params,
+    chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: topic.outcome.created.threadId },
+  } })).outcome.kind, "success");
+  assert.deepEqual(seen.filter((item) => item.method === "copyMessage"), [
+    { method: "copyMessage", body: { chat_id: 123456789, from_chat_id: config.supportGroupId, message_id: 701 } },
+    { method: "copyMessage", body: { chat_id: config.supportGroupId, message_thread_id: 55, from_chat_id: config.supportGroupId, message_id: 701 } },
+  ]);
+
+  const anotherNotice = await notice(own);
+  const anotherUser = await notice(other);
+  const before = seen.length;
+  for (const [binding, reason] of [
+    [anotherNotice.outcome.created.binding, "blob_invalid"],
+    [anotherUser.outcome.created.binding, "binding_invalid"],
+  ]) {
+    const result = await tgSupport.execute({ ...command, binding });
+    assert.deepEqual(result.outcome, { kind: "rejected_by_host", reason });
+  }
+  assert.equal(seen.length, before);
+});
+
+test("host templates receive the authenticated user ID instead of unchecked profile metadata", async () => {
+  const seen = [];
+  const now = 1700000000000;
+  const custom = { ...config, templates: { languages: ["ru", "en"], fallback: "en", overrides: {
+    topic_header: { ru: ({ profile, verifiedUserId }) => ({
+      text: profile?.firstName ?? "User",
+      entities: verifiedUserId === null ? [] : [{ type: "text_link", offset: 0, length: 7, url: `tg://user?id=${verifiedUserId}` }],
+    }) },
+  } } };
+  const tgSupport = createWebTgSupport(custom, {
+    clock: { now: () => now },
+    resolveProfile: async () => ({ firstName: "Display", id: 987654321, languageCode: "en" }),
+    fetch: async (request) => { seen.push(await request.json()); return Response.json({ ok: true, result: { message_id: 77 } }); },
+  });
+  const user = async (id) => tgSupport.normalize({ update_id: id, message: {
+    message_id: 42, chat: { id, type: "private" }, from: { id, is_bot: false, first_name: "Old", language_code: "ru" }, text: "Help",
+  } });
+  const own = await user(123456789);
+  const other = await user(987654321);
+  const command = { opId: "30", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: own.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000,
+    method: "sendMessage", params: { chat_id: { sealed: own.chat }, text: { template: "topic_header", language: { sealed: own.language }, user: { sealed: own.chat } } } };
+  assert.equal((await tgSupport.execute(command)).outcome.kind, "success");
+  assert.deepEqual(seen, [{ chat_id: 123456789, text: "Display", entities: [{ type: "text_link", offset: 0, length: 7, url: "tg://user?id=123456789" }] }]);
+  const rejected = await tgSupport.execute({ ...command, params: { ...command.params, text: { ...command.params.text, user: { sealed: other.chat } } } });
+  assert.deepEqual(rejected.outcome, { kind: "rejected_by_host", reason: "blob_invalid" });
+  assert.equal(seen.length, 1);
+});
+
+test("missing host translations use the default language and missing host templates keep the SDK text", async () => {
+  const seen = [];
+  const now = 1700000000000;
+  const tgSupport = createWebTgSupport({ ...config, templates: { languages: ["ru", "en"], fallback: "en", overrides: {
+    welcome_hint: { en: ({ language, verifiedUserId }) => ({ text: `Host fallback: ${language}, ${verifiedUserId}` }) },
+  } } }, { clock: { now: () => now }, fetch: async (request) => {
+    seen.push(await request.json()); return Response.json({ ok: true, result: { message_id: 77 } });
+  } });
+  const user = async (language_code) => tgSupport.normalize({ update_id: 42, message: {
+    message_id: 10, chat: { id: 123456789, type: "private" }, from: { id: 123456789, is_bot: false, language_code }, text: "Help",
+  } });
+  const ru = await user("ru");
+  const fr = await user("fr-CA");
+  const command = (event, template) => ({ opId: "40", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: event.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000,
+    method: "sendMessage", params: { chat_id: { sealed: event.chat }, text: { template, language: { sealed: event.language } } } });
+  for (const event of [ru, fr]) assert.equal((await tgSupport.execute(command(event, "welcome_hint"))).outcome.kind, "success");
+  assert.equal((await tgSupport.execute(command(ru, "user_edited"))).outcome.kind, "success");
+  assert.deepEqual(seen, [
+    { chat_id: 123456789, text: "Host fallback: en, null" },
+    { chat_id: 123456789, text: "Host fallback: en, null" },
+    { chat_id: 123456789, text: "✏️ Пользователь изменил сообщение." },
+  ]);
+});

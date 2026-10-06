@@ -56,7 +56,7 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
           const entities = Array.isArray(message.entities) ? message.entities.map(record) : []; const isBotCommand = entities.some((entity) => entity?.type === "bot_command" && entity.offset === 0);
           return { type: "user_message", eventId: id, ...await profileFields(from.id, parseProfile(from)), message: token, messageId, replyTo, copyable, isBotCommand, isStart: isBotCommand && typeof message.text === "string" && /^\/start(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(message.text) };
         }
-        return { type: "support_message", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, messageId, replyTo, replyScopedMessageId: replyTo && integer(replied?.message_id) ? await keys.seal("message_id", replyTo, { message_id: replied.message_id }) : null, copyable };
+        return { type: "support_message", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, messageId, replyTo, replyScopedMessageId: replyTo ? await keys.seal("message_id", replyTo, { message_id: message.message_id }) : null, copyable };
       } catch { return null; }
     },
     async hostNotice(user: { id: number; profile: TelegramUserProfile }, text: FormattedText, idempotencyKey?: string): Promise<TgSupportEvent> {
