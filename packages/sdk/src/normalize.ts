@@ -31,15 +31,16 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
         if (serviceFields.some((field) => message[field] !== undefined)) return null;
         const personal = chat.type === "private" && chat.id === from.id;
         const threadId = integer(message.message_thread_id) && message.message_thread_id > 1 ? message.message_thread_id : null;
-        const support = chat.type === "supergroup" && chat.id === config.supportGroupId && threadId !== null;
+        const support = chat.type === "supergroup" && chat.id === config.supportGroupId && (reaction !== null || threadId !== null);
         if (!personal && !support) return null;
-        const subject = personal ? await keys.token("user", from.id) : await keys.token("thread", chat.id, threadId ?? 0);
         const id = await eventId(update.update_id); const token = await keys.token("message", chat.id, message.message_id);
         if (reaction) {
+          const subject = personal ? await keys.token("user", from.id) : token;
           const values = jsonRecords(reaction.new_reaction); if (!values) return null;
           const reactions = await keys.seal("reactions", subject, { reaction: values });
-          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, reactions };
+          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), message: token, reactions };
         }
+        const subject = personal ? await keys.token("user", from.id) : await keys.token("thread", chat.id, threadId ?? 0);
         if (edited) {
           if (!integer(message.edit_date) || message.edit_date < 0) return null;
           const field = typeof message.text === "string" ? "text" : typeof message.caption === "string" ||
@@ -48,7 +49,7 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
           const entities = jsonRecords(field === "text" ? message.entities : message.caption_entities); if (entities) content[field === "text" ? "entities" : "caption_entities"] = entities;
           const preview = jsonRecord(message.link_preview_options); if (field === "text" && preview) content.link_preview_options = preview;
           if (field === "caption" && typeof message.show_caption_above_media === "boolean") content.show_caption_above_media = message.show_caption_above_media;
-          const sealed = await keys.seal("edit_content", subject, content); const revision = { editDate: message.edit_date, updateId: update.update_id };
+          const sealed = await keys.seal("edit_content", personal ? subject : token, content); const revision = { editDate: message.edit_date, updateId: update.update_id };
           return personal ? { type: "user_edit", eventId: id, user: subject, message: token, revision, field, content: sealed } : { type: "support_edit", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, revision, field, content: sealed };
         }
         const replied = record(message.reply_to_message); const replyTo = integer(replied?.message_id) ? await keys.token("message", chat.id, replied.message_id) : null;

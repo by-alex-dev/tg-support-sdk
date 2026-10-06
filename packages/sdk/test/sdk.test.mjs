@@ -13,30 +13,31 @@ const config = {
   configRevision: 1,
 };
 
-async function correspondenceHost() {
+async function correspondenceHost(configuration = config, userId = 123456789) {
   const now = 1700000000000;
   const calls = [];
   let configured;
   let nextMessage = 700;
+  let nextThread = 55;
   let failure = null;
   const options = { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "User" }), fetch: async (request) => {
     const method = new URL(request.url).pathname.split("/").at(-1);
     const params = await request.json();
     if (method === "events") { configured = params.events[0]; return new Response(null, { status: 202 }); }
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
-    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: configuration.supportGroupId, type: "supergroup", is_forum: true } });
     if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
     calls.push({ method, params });
     if (failure) { const description = failure; failure = null; return Response.json({ ok: false, error_code: 400, description }); }
-    const result = method === "createForumTopic" ? { message_thread_id: 55 }
+    const result = method === "createForumTopic" ? { message_thread_id: nextThread++ }
       : method === "sendMessage" || method === "copyMessage" ? { message_id: nextMessage++ }
         : method === "editMessageText" || method === "editMessageCaption" ? { message_id: params.message_id } : true;
     return Response.json({ ok: true, result });
   } };
-  await configure(config, options);
-  const client = createWebTgSupport(config, options);
+  await configure(configuration, options);
+  const client = createWebTgSupport(configuration, options);
   const user = await client.normalize({ update_id: 10, message: {
-    message_id: 10, chat: { id: 123456789, type: "private" }, from: { id: 123456789, is_bot: false, first_name: "User", language_code: "ru" }, text: "Original private message",
+    message_id: 10, chat: { id: userId, type: "private" }, from: { id: userId, is_bot: false, first_name: "User", language_code: "ru" }, text: "Original private message",
   } });
   const command = { opId: "50", attemptToken: "aaaaaaaaaaaaaaaaaaaaaa", subject: user.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000 };
   const groupChat = configured.group_chat;
@@ -83,6 +84,7 @@ test("private and operator edits preserve sealed text, captions and revisions th
     calls.length = 0;
     const result = await client.execute({ ...command, binding: topic.binding, method: change.method, params: {
       chat_id: { sealed: destination }, message_id: { sealed: copied.outcome.created.messageId }, content: { sealed: edit.content },
+      ...(side === "support" ? { source_message_id: { sealed: original.messageId } } : {}),
     } });
     assert.equal(result.outcome.kind, "success");
     assert.deepEqual(calls, [{ method: change.method, params: {
@@ -123,6 +125,8 @@ test("edit commands reject foreign ciphertext and retain Telegram errors for the
     [{ ...recipe, params: { ...recipe.params, content: { sealed: other.content } } }, "blob_invalid"],
     [{ ...recipe, params: { ...recipe.params, content: { sealed: otherTopic.content } } }, "blob_invalid"],
     [{ ...recipe, params: { ...recipe.params, content: { sealed: own.content.replace("s1.Ab3x.", "s1.Wxyz.") } } }, "unknown_kid"],
+    [{ ...recipe, params: { ...recipe.params, source_message_id: { sealed: user.messageId } } }, "blob_invalid"],
+    [{ ...recipe, params: { ...recipe.params, source_message_id: { sealed: copied.outcome.created.messageId } } }, "blob_invalid"],
     [{ ...recipe, method: "editMessageCaption" }, "malformed"],
   ]) {
     const result = await client.execute(invalid);
@@ -154,7 +158,7 @@ test("edit commands reject foreign ciphertext and retain Telegram errors for the
   }
 });
 
-test("private reactions copy the whole sealed list and clearing it while refusing foreign and open reactions", async () => {
+test("reactions copy the whole sealed list and clearing it through authenticated group message proofs", async () => {
   const { client, user, command, groupChat, topic, calls } = await correspondenceHost();
   const copied = await client.execute({ ...command, method: "copyMessage", params: {
     chat_id: { sealed: groupChat }, message_thread_id: { sealed: topic.threadId }, from_chat_id: { sealed: user.chat }, message_id: { sealed: user.messageId },
@@ -184,6 +188,55 @@ test("private reactions copy the whole sealed list and clearing it while refusin
   assert.deepEqual(calls, [{ method: "setMessageReaction", params: { chat_id: config.supportGroupId, message_id: 700, reaction: [{ type: "emoji", emoji: "👀" }] } }]);
   assert.equal(client.allowedUpdates.includes("edited_message"), true);
   assert.equal(client.allowedUpdates.includes("message_reaction"), true);
+  const groupReaction = (messageId, list) => client.normalize({ update_id: 1100 + messageId, message_reaction: {
+    chat: { id: config.supportGroupId, type: "supergroup" }, message_id: messageId,
+    user: { id: 555, is_bot: false }, date: 100, old_reaction: [], new_reaction: list,
+  } });
+  const toPrivate = { ...command, method: "setMessageReaction", params: {
+    chat_id: { sealed: user.chat }, message_id: { sealed: user.messageId },
+    source_message_id: { sealed: copied.outcome.created.messageId },
+  } };
+  calls.length = 0;
+  for (const list of [[{ type: "emoji", emoji: "👍" }, { type: "custom_emoji", custom_emoji_id: "999123456789000" }], []]) {
+    const event = await groupReaction(700, list);
+    assert.notEqual(event, null, "actual group reactions have no message_thread_id");
+    assert.equal(event.type, "support_reaction");
+    assert.equal(Object.hasOwn(event, "thread"), false);
+    assert.equal(event.message, copied.outcome.created.message);
+    for (const plaintext of ["👍", "999123456789000", "123456789"]) assert.equal(JSON.stringify(event).includes(plaintext), false);
+    assert.equal((await client.execute({ ...toPrivate, params: { ...toPrivate.params, reaction: { sealed: event.reactions } } })).outcome.kind, "success");
+    assert.deepEqual(calls.at(-1), { method: "setMessageReaction", params: { chat_id: 123456789, message_id: 10, reaction: list } });
+  }
+  const reaction = await groupReaction(700, [{ type: "emoji", emoji: "🔥" }]);
+  const nextCopy = await client.execute({ ...command, method: "copyMessage", params: {
+    chat_id: { sealed: groupChat }, message_thread_id: { sealed: topic.threadId }, from_chat_id: { sealed: user.chat }, message_id: { sealed: user.messageId },
+  } });
+  const otherHost = await correspondenceHost(config, 987654321);
+  const otherCopy = await otherHost.client.execute({ ...otherHost.command, method: "copyMessage", params: {
+    chat_id: { sealed: otherHost.groupChat }, message_thread_id: { sealed: otherHost.topic.threadId },
+    from_chat_id: { sealed: otherHost.user.chat }, message_id: { sealed: otherHost.user.messageId },
+  } });
+  const otherGroupHost = await correspondenceHost({ ...config, supportGroupId: -1002222222222 });
+  const otherGroupCopy = await otherGroupHost.client.execute({ ...otherGroupHost.command, method: "copyMessage", params: {
+    chat_id: { sealed: otherGroupHost.groupChat }, message_thread_id: { sealed: otherGroupHost.topic.threadId },
+    from_chat_id: { sealed: otherGroupHost.user.chat }, message_id: { sealed: otherGroupHost.user.messageId },
+  } });
+  calls.length = 0;
+  const recipeWithProof = { ...toPrivate, params: { ...toPrivate.params, reaction: { sealed: reaction.reactions } } };
+  for (const [source, reason] of [
+    [undefined, "blob_invalid"],
+    [{ sealed: user.messageId }, "blob_invalid"],
+    [{ sealed: nextCopy.outcome.created.messageId }, "blob_invalid"],
+    [{ sealed: otherCopy.outcome.created.messageId }, "blob_invalid"],
+    [{ sealed: otherGroupCopy.outcome.created.messageId }, "blob_invalid"],
+    [{ sealed: copied.outcome.created.messageId.replace("s1.Ab3x.", "s1.Wxyz.") }, "unknown_kid"],
+    [{ sealed: "invalid" }, "malformed"],
+  ]) {
+    const result = await client.execute({ ...recipeWithProof, params: { ...recipeWithProof.params, source_message_id: source } });
+    assert.equal(result.outcome.kind, "rejected_by_host");
+    assert.equal(result.outcome.reason, reason);
+  }
+  assert.deepEqual(calls, []);
 });
 
 test("normalization matches independent LP32BE HMAC vectors and performs no startup I/O", async () => {
@@ -528,7 +581,8 @@ test("a notice reply copies the operator message to its user and topic while pre
   const command = { ...common, binding: notified.outcome.created.binding, method: "copyMessage", params: {
     chat_id: { sealed: own.chat }, from_chat_id: { sealed: configured.group_chat }, message_id: { sealed: reply.replyScopedMessageId },
   } };
-  assert.equal((await tgSupport.execute(command)).outcome.kind, "success");
+  const delivered = await tgSupport.execute(command);
+  assert.equal(delivered.outcome.kind, "success");
   assert.equal((await tgSupport.execute({ ...command, params: { ...command.params,
     chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: topic.outcome.created.threadId },
   } })).outcome.kind, "success");
@@ -548,6 +602,37 @@ test("a notice reply copies the operator message to its user and topic while pre
     assert.deepEqual(result.outcome, { kind: "rejected_by_host", reason });
   }
   assert.equal(seen.length, before);
+  const edited = await tgSupport.normalize({ update_id: 1001, edited_message: {
+    message_id: 701, message_thread_id: 56, edit_date: 100, chat: { id: config.supportGroupId, type: "supergroup" },
+    from: { id: 555, is_bot: false }, text: "Changed Notifications reply <&>",
+  } });
+  const reacted = await tgSupport.normalize({ update_id: 1002, message_reaction: {
+    message_id: 701, chat: { id: config.supportGroupId, type: "supergroup" },
+    user: { id: 555, is_bot: false }, date: 100, old_reaction: [], new_reaction: [{ type: "emoji", emoji: "👍" }],
+  } });
+  assert.equal(edited.message, reply.message);
+  assert.equal(edited.thread, reply.thread);
+  assert.equal(reacted.message, reply.message);
+  assert.equal(JSON.stringify(edited).includes("Changed Notifications reply <&>"), false);
+  assert.equal(JSON.stringify(reacted).includes("👍"), false);
+  const target = { chat_id: { sealed: own.chat }, message_id: { sealed: delivered.outcome.created.messageId },
+    source_message_id: { sealed: reply.replyScopedMessageId } };
+  for (const [method, content, expected] of [
+    ["editMessageText", { content: { sealed: edited.content } }, { text: "Changed Notifications reply <&>" }],
+    ["setMessageReaction", { reaction: { sealed: reacted.reactions } }, { reaction: [{ type: "emoji", emoji: "👍" }] }],
+  ]) {
+    const recipe = { ...common, binding: notified.outcome.created.binding, method, params: { ...target, ...content } };
+    const count = seen.length;
+    for (const invalid of [
+      { ...recipe, binding: anotherNotice.outcome.created.binding },
+      { ...recipe, binding: anotherUser.outcome.created.binding },
+      { ...recipe, params: { ...recipe.params, source_message_id: { sealed: notified.outcome.created.messageId } } },
+      { ...recipe, params: { ...recipe.params, source_message_id: undefined } },
+    ]) assert.equal((await tgSupport.execute(invalid)).outcome.kind, "rejected_by_host");
+    assert.equal(seen.length, count, "N700 authorizes M701 only for the bound user");
+    assert.equal((await tgSupport.execute(recipe)).outcome.kind, "success");
+    assert.deepEqual(seen.at(-1), { method, body: { chat_id: 123456789, message_id: 900, ...expected } });
+  }
 });
 
 test("host templates receive the authenticated user ID instead of unchecked profile metadata", async () => {
