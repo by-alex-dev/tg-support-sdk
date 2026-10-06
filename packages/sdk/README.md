@@ -1,5 +1,7 @@
 # tg-support-sdk
 
+This branch prepares SDK 0.5.0, including the optional grammY adapter. It is not yet published. The Service wire minimum remains 0.4.0; the 1.0 API stabilization and live rollout are separate release steps.
+
 To publish a release, run `bash scripts/prepare-sdk-publish.sh` from the monorepo root. The wizard uses your personal npm account, builds the package, runs its tests and shows the tarball before publication. An npm organization is optional.
 
 The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Creating an SDK instance performs no network requests. The main entry bundles its protocol validation and has no runtime dependencies. The optional `tg-support-sdk/grammy` entry uses the host's grammY installation.
