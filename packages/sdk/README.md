@@ -1,9 +1,9 @@
-# @support-relay/sdk
+# tg-support-sdk
 
 The 0.1.0 SDK connects a Telegram bot host to Support Relay. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Constructing a relay performs no network requests. The package bundles its protocol validation and has no runtime dependencies.
 
 ```ts
-import { createWebRelay, parseKeys } from "@support-relay/sdk";
+import { createWebRelay, parseKeys } from "tg-support-sdk";
 
 const relay = createWebRelay({
   botToken: env.BOT_TOKEN,

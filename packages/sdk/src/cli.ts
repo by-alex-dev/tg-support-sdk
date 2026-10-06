@@ -14,7 +14,7 @@ async function main(): Promise<void> {
     console.log(`SEAL_KEYS=${keys.sealKeys}`);
     return;
   }
-  if (command !== "configure" || flag !== "--config" || !argument || extra.length) throw new Error("Usage: support-relay keys [--seal] | configure --config ./relay.config.mjs");
+  if (command !== "configure" || flag !== "--config" || !argument || extra.length) throw new Error("Usage: tg-support-sdk keys [--seal] | configure --config ./relay.config.mjs");
   const module: { default?: RelayConfig & { botToken: string } } = await import(pathToFileURL(resolve(argument)).href);
   if (!module.default) throw new Error("Config module must have a default export.");
   await configure(module.default);

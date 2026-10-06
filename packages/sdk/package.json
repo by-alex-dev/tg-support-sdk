@@ -1,10 +1,10 @@
 {
-  "name": "@support-relay/sdk",
+  "name": "tg-support-sdk",
   "version": "0.1.0",
   "type": "module",
   "files": ["dist", "README.md"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
-  "bin": {"support-relay": "./dist/cli.js"},
+  "bin": {"tg-support-sdk": "./dist/cli.js"},
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
