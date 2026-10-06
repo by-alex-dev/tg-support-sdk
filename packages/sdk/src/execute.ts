@@ -24,11 +24,13 @@ export function createExecutor(config: RelayConfig, keys: Keyring, botApi: BotAp
       if (!validators.parse("Command", wire).ok || !Number.isFinite(command.receivedAt) || !Number.isFinite(command.expiresAt)) throw new Rejected("malformed");
       if (!isMethod(command.method)) throw new Rejected("method_not_allowed");
       const method = command.method;
-      const parsed = validators.params(method, command.params);
+      const params = record(command.params);
+      if (!params) throw new Rejected("malformed");
+      const parsed = validators.params(method, params);
+      let validStructure = parsed.ok;
       if (!parsed.ok) {
-        const parameters = record(command.params);
         for (const slot of ["name", "text"]) {
-          const reference = record(parameters?.[slot]);
+          const reference = record(params[slot]);
           if (typeof reference?.template !== "string") continue;
           const allowedIds = parsed.errors.flatMap<unknown>((error) => {
             if (error.instancePath !== `/${slot}/template`) return [];
@@ -36,11 +38,11 @@ export function createExecutor(config: RelayConfig, keys: Keyring, botApi: BotAp
             const values: unknown = error.params.allowedValues;
             return error.keyword === "enum" && Array.isArray(values) ? values : [];
           }).filter((id): id is string => typeof id === "string");
-          if (!allowedIds.includes(reference.template) && allowedIds.some((template) => validators.params(method, { ...parameters, [slot]: { ...reference, template } }).ok)) throw new Rejected("unknown_template");
+          // Authorize the original ID after binding and sealed-slot checks.
+          if (!allowedIds.includes(reference.template) && allowedIds.some((template) => validators.params(method, { ...params, [slot]: { ...reference, template } }).ok)) validStructure = true;
         }
-        throw new Rejected("malformed");
       }
-      const params = parsed.value;
+      if (!validStructure) throw new Rejected("malformed");
       const groupToken = await keys.token("group", config.supportGroupId);
       let binding: Binding | null = null;
       if (command.binding !== null) {
@@ -99,20 +101,23 @@ export function createExecutor(config: RelayConfig, keys: Keyring, botApi: BotAp
         const ref = record(value);
         if (!ref || typeof ref.template !== "string") throw new Rejected("unknown_template");
         const id = allowed.find((item) => item === ref.template);
-        if (!id) throw new Rejected("unknown_template");
-        templateId = id;
         const language = await keys.open("language", [command.subject], sealed(ref.language));
         if (!language.ok) throw new Rejected(language.error);
         const languageValue = validators.parse("LanguagePayload", language.value);
         if (!languageValue.ok) throw new Rejected("malformed");
         let profile = null;
         let userId: number | undefined;
-        if (["topic_title", "topic_header", "new_user_notice"].includes(id)) {
+        const needsProfile = id !== undefined && ["topic_title", "topic_header", "new_user_notice"].includes(id);
+        if (needsProfile || (id === undefined && ref.user !== undefined)) {
           const user = await address(ref.user);
           if (user.kind !== "private") throw new Rejected("addressee_not_allowed");
           userId = user.id;
-          if (options.resolveProfile) profile = await options.resolveProfile(user.id);
-          else { const response = await botApi.getProfile({ method: "getChat", chatId: user.id }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
+        }
+        if (!id) throw new Rejected("unknown_template");
+        templateId = id;
+        if (needsProfile && userId !== undefined) {
+          if (options.resolveProfile) profile = await options.resolveProfile(userId);
+          else { const response = await botApi.getProfile({ method: "getChat", chatId: userId }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
         }
         return renderTemplate(id, languageValue.value.language_code, profile, config.templates, userId);
       };

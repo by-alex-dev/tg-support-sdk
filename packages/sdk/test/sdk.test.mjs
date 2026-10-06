@@ -103,6 +103,9 @@ test("unknown and wrong-slot template IDs are rejected without reaching Telegram
     assert.equal(result.outcome.kind, "rejected_by_host");
     assert.equal(result.outcome.reason, reason);
   }
+  const result = await relay.execute({ ...command, binding: event.language, params: { chat_id: { sealed: event.chat }, text: { template: "unknown_template_id", ...reference } } });
+  assert.equal(result.outcome.kind, "rejected_by_host");
+  assert.equal(result.outcome.reason, "binding_invalid");
   assert.deepEqual(requests, []);
 });
 
