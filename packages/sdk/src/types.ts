@@ -20,6 +20,7 @@ export type TgSupportConfig = {
   service: { url: string; botSecret: string };
   keys: TgSupportKeys;
   supportGroupId: number;
+  previousSupportGroupIds?: readonly number[];
   features: { notificationsTopic: boolean; welcomeHint: boolean };
   transport: { kind: "push"; hostUrl: string } | { kind: "pull" };
   attemptDeadlineSeconds?: number;
