@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createHmac, createDecipheriv, createCipheriv } from "node:crypto";
+import { createHmac, createDecipheriv, createCipheriv, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createWebTgSupport, configure, ServiceError } from "tg-support-sdk";
+
+// Independent protocol reference: LP32BE frames and Node's HMAC/AES-GCM.
+const referenceFrames = (parts) => Buffer.concat(parts.flatMap((part) => {
+  const bytes = Buffer.from(part), length = Buffer.alloc(4); length.writeUInt32BE(bytes.length);
+  return [length, bytes];
+}));
+const referenceToken = (purpose, ...parts) => createHmac("sha256", config.keys.tokenKey)
+  .update(referenceFrames([purpose, ...parts.map(String)])).digest("base64url");
+const referenceAad = (purpose, subject, botId = 12345) => referenceFrames(["TGS1-SEAL", String(botId), purpose, Buffer.from(subject, "base64url")]);
+function referenceOpen(blob, purpose, subject) {
+  const [version, kid, nonce, encoded] = blob.split(".");
+  assert.equal(version, "s1"); assert.equal(kid, "Ab3x");
+  const bytes = Buffer.from(encoded, "base64url"), decipher = createDecipheriv("aes-256-gcm", Buffer.alloc(32), Buffer.from(nonce, "base64url"));
+  decipher.setAAD(referenceAad(purpose, subject)); decipher.setAuthTag(bytes.subarray(-16));
+  return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]).toString("utf8"));
+}
+function referenceSeal(payload, purpose, subject, botId = 12345) {
+  const nonce = randomBytes(12), cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32), nonce);
+  cipher.setAAD(referenceAad(purpose, subject, botId));
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload)), cipher.final(), cipher.getAuthTag()]);
+  return `s1.Ab3x.${nonce.toString("base64url")}.${encrypted.toString("base64url")}`;
+}
 
 const config = {
   botToken: "12345:telegram-test-token",
@@ -74,7 +97,7 @@ async function correspondenceHost(configuration = config, userId = 123456789) {
   } });
   assert.equal(result.outcome.kind, "success");
   calls.length = 0;
-  return { client, user, command, groupChat, topic: result.outcome.created, calls, failNext: (description) => { failure = description; } };
+  return { client, user, command, groupChat, group: configured.group, topic: result.outcome.created, calls, failNext: (description) => { failure = description; } };
 }
 
 test("private and operator edits preserve sealed text, captions and revisions through authorized edits", async () => {
@@ -279,6 +302,32 @@ test("normalization matches independent LP32BE HMAC vectors and performs no star
   assert.equal(event.user, "g8M2OyR9FtTozaq8_Z_0vzJcrh8QUds6vY5A6ylWLm0");
   assert.equal(event.message, "LMrOtEnUUwyuHxFhej1I89AWNVlFVT6GgdjiLXJOsFM");
   assert.equal(event.profile, "dfa-VNF3my9FDXYQKIYmWPxUlRtZrvkoeIJ-BfeZAtk");
+  const vectors = JSON.parse(readFileSync(new URL("../../../conformance/vectors/tokens.json", import.meta.url), "utf8")).vectors;
+  const vectorHost = await correspondenceHost();
+  assert.equal(vectorHost.groupChat.startsWith("s1.Ab3x."), true);
+  const configuredGroup = referenceToken("group", config.supportGroupId);
+  assert.deepEqual(referenceOpen(vectorHost.groupChat, "group_chat", configuredGroup), { chat_id: config.supportGroupId });
+  const groupVector = vectors.find(vector => vector.purpose === "group");
+  assert.equal(vectorHost.group, groupVector.token);
+  const ambiguousMessages = [];
+  for (const vector of vectors.filter(vector => vector.purpose === "message" && vector.parts[0] < 100)) {
+    const [id, messageId] = vector.parts;
+    const normalized = await tgSupport.normalize({ update_id: 120 + id, message: { message_id: messageId, date: 1,
+      chat: { id, type: "private" }, from: { id, is_bot: false, first_name: "User" }, text: "Ambiguous parts" } });
+    assert.equal(normalized.message, vector.token);
+    ambiguousMessages.push(normalized.message);
+  }
+  const threads = [];
+  for (const vector of vectors.filter(vector => vector.purpose === "thread")) {
+    const [groupId, threadId] = vector.parts;
+    const client = createWebTgSupport({ ...config, supportGroupId: groupId }, { fetch: async () => { throw new Error("Normalization must not perform I/O"); } });
+    const normalized = await client.normalize({ update_id: 150 + threads.length, message: { message_id: 42, date: 1,
+      chat: { id: groupId, type: "supergroup" }, message_thread_id: threadId, from: { id: 555, is_bot: false, first_name: "Operator" }, text: "Same thread number" } });
+    assert.equal(normalized.thread, vector.token);
+    threads.push(normalized.thread);
+  }
+  assert.notEqual(threads[0], threads[1]);
+  assert.notEqual(ambiguousMessages[0], ambiguousMessages[1]);
   assert.equal(JSON.stringify(event).includes("Sensitive message"), false);
   const [version, kid, nonce, encoded] = event.chat.split(".");
   assert.equal(version, "s1");
@@ -315,6 +364,17 @@ test("normalization matches independent LP32BE HMAC vectors and performs no star
     assert.equal(normalized.copyable, copyable);
   }
   const support = { ...original, message_thread_id: 555, chat: { id: config.supportGroupId, type: "supergroup" }, from: { ...original.from, id: 987654321 } };
+  for (const message of [
+    { ...original, from: { ...original.from, is_bot: true } },
+    { ...support, chat: { id: -1009876543210, type: "supergroup" } },
+    { ...support, message_thread_id: 1 },
+    { ...support, message_thread_id: undefined },
+  ]) assert.equal(await tgSupport.normalize({ update_id: 923, message }), null);
+  const start = await tgSupport.normalize({ update_id: 924, message: { ...original, text: "/start",
+    entities: [{ type: "bot_command", offset: 0, length: 6 }] } });
+  assert.equal(start.type, "user_message");
+  assert.equal(start.isStart, true);
+  assert.equal(start.isBotCommand, true);
   const updates = [
     { update_id: 910, message: original },
     { update_id: 911, callback_query: { id: "private-callback", from: original.from, data: "Private callback data", message: original } },
@@ -369,8 +429,36 @@ test("push challenge verifies original bytes and the configured path despite a p
 });
 
 test("claim rejects an unauthenticated response rather than treating it as an empty queue", async () => {
-  const tgSupport = createWebTgSupport(config, { clock: { now: () => 1700000000000 }, fetch: async () => Response.json({ commands: [] }) });
-  await assert.rejects(tgSupport.claim(), (error) => error instanceof ServiceError && error.result.kind === "fatal" && error.result.reason === "bad_signature");
+  const now = 1700000000000, requests = [];
+  let authentication = "unsigned", payload;
+  const tgSupport = createWebTgSupport({ ...config, transport: { kind: "pull" } }, { clock: { now: () => now }, fetch: async request => {
+    const method = new URL(request.url).pathname.split("/").at(-1);
+    if (method === "claim") {
+      const body = JSON.stringify(payload), timestamp = String(now / 1000);
+      const key = authentication === "forged" ? Buffer.alloc(32, 7) : Buffer.alloc(32);
+      const signature = createHmac("sha256", key).update(`TGS1-RES\n${timestamp}\n200\n/v1/commands/claim\n${body}`).digest("hex");
+      return new Response(body, { status: 200, headers: authentication === "unsigned" ? {} : {
+        "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}`,
+      } });
+    }
+    requests.push({ method, body: await request.json() });
+    return Response.json({ ok: true, result: { message_id: 99 } });
+  } });
+  const own = await tgSupport.normalize({ update_id: 1, message: { message_id: 42, date: 1, chat: { id: 123456789, type: "private" },
+    from: { id: 123456789, is_bot: false, first_name: "User" }, text: "Claim source" } });
+  payload = { commands: [{ op_id: "1", attempt_token: randomBytes(16).toString("base64url"), deadline_seconds: 60,
+    subject: own.user, binding: null, method: "copyMessage", params: { chat_id: { sealed: own.chat },
+      from_chat_id: { sealed: own.chat }, message_id: { sealed: own.messageId } } }] };
+  for (authentication of ["unsigned", "forged"]) {
+    await assert.rejects((async () => { for (const command of await tgSupport.claim()) await tgSupport.execute(command); })(),
+      error => error instanceof ServiceError && error.result.kind === "fatal" && error.result.reason === "bad_signature");
+    assert.deepEqual(requests, []);
+  }
+  authentication = "authentic";
+  const claimed = await tgSupport.claim();
+  assert.equal(claimed.length, 1);
+  assert.equal((await tgSupport.execute(claimed[0])).outcome.kind, "success");
+  assert.deepEqual(requests, [{ method: "copyMessage", body: { chat_id: 123456789, from_chat_id: 123456789, message_id: 42 } }]);
 });
 
 test("command authorization prevents another user's ciphertext reaching Telegram and ignores extra Bot API fields", async () => {
@@ -379,6 +467,7 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   let configured;
   let nextThread = 55;
   let returnedMessageId = 777;
+  let profileFailure = false;
   const options = { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "User" }), fetch: async (request) => {
     const path = new URL(request.url).pathname;
     const body = request.body ? await request.json() : null;
@@ -388,7 +477,9 @@ test("command authorization prevents another user's ciphertext reaching Telegram
     if (method === "getChat" && body.chat_id === config.supportGroupId) return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
     if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
     requests.push({ path, body });
-    if (method === "getChat") return Response.json({ ok: true, result: { id: body.chat_id, type: "private", first_name: "Fetched" } });
+    if (method === "getChat") return profileFailure
+      ? Response.json({ ok: false, error_code: 403, description: "Forbidden: profile unavailable" })
+      : Response.json({ ok: true, result: { id: body.chat_id, type: "private", first_name: "Fetched" } });
     return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: nextThread++ } : { message_id: returnedMessageId } });
   } };
   const tgSupport = createWebTgSupport(config, options);
@@ -401,9 +492,47 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   assert.equal(rejected.outcome.kind, "rejected_by_host");
   assert.equal(rejected.outcome.reason, "blob_invalid");
   assert.deepEqual(requests, []);
-  const accepted = await tgSupport.execute({ ...command, attemptToken: "bbbbbbbbbbbbbbbbbbbbbg", params: { ...command.params, message_id: { sealed: own.messageId } } });
+  const validParams = { ...command.params, message_id: { sealed: own.messageId } };
+  const wire = { kind: "commands", ignored_outer: "Private outer value", commands: [{ op_id: command.opId,
+    attempt_token: randomBytes(16).toString("base64url"), deadline_seconds: 60, subject: own.user, binding: null,
+    method: "copyMessage", params: validParams, ignored_command: "Private command value" }] };
+  const body = JSON.stringify(wire), timestamp = String(now / 1000);
+  const signature = createHmac("sha256", Buffer.alloc(32)).update(`TGS1-REQ\n${timestamp}\nPOST\n/tg-support?version=1\n${body}`).digest("hex");
+  const received = await tgSupport.receivePush(new Request(config.transport.hostUrl, { method: "POST", body, headers: {
+    "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}`,
+  } }));
+  assert.equal(received.response.status, 202);
+  assert.equal(received.commands.length, 1);
+  const accepted = await tgSupport.execute(received.commands[0]);
   assert.equal(accepted.outcome.kind, "success");
   assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/copyMessage", body: { chat_id: 123456789, from_chat_id: 123456789, message_id: 42 } }]);
+  assert.equal(accepted.outcome.created.kind, "message");
+  assert.equal(accepted.outcome.created.message, referenceToken("message", 123456789, 777));
+  assert.deepEqual(referenceOpen(accepted.outcome.created.messageId, "message_id", own.user), { message_id: 777, chat_id: 123456789 });
+  assert.equal(accepted.outcome.created.binding, null);
+  const referenceChat = referenceSeal({ chat_id: 123456789 }, "private_chat", own.user);
+  const referenceLanguage = referenceSeal({ language_code: "ru" }, "language", own.user);
+  const referenceClient = createWebTgSupport({ ...config, templates: { languages: ["ru", "en"], fallback: "en",
+    overrides: { welcome_hint: { ru: () => ({ text: "Independent reference RU text" }), en: () => ({ text: "Independent reference EN text" }) } },
+  } }, options);
+  const referenceCommand = { ...command, method: "sendMessage", params: { chat_id: { sealed: referenceChat },
+    text: { template: "welcome_hint", language: { sealed: referenceLanguage } } } };
+  requests.length = 0;
+  const referenceSent = await referenceClient.execute({ ...referenceCommand, attemptToken: "dddddddddddddddddddddg" });
+  assert.equal(referenceSent.outcome.kind, "success");
+  assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/sendMessage", body: { chat_id: 123456789,
+    text: "Independent reference RU text" } }]);
+  assert.equal(referenceSent.outcome.created.message, referenceToken("message", 123456789, 777));
+  assert.deepEqual(referenceOpen(referenceSent.outcome.created.messageId, "message_id", own.user), { message_id: 777, chat_id: 123456789 });
+  assert.equal(referenceSent.outcome.created.binding, null);
+  requests.length = 0;
+  for (const [purpose, subject, botId] of [["private_chat", own.user, 12346], ["group_chat", own.user, 12345], ["private_chat", other.user, 12345]]) {
+    const result = await referenceClient.execute({ ...referenceCommand, attemptToken: randomBytes(16).toString("base64url"), params: {
+      ...referenceCommand.params, chat_id: { sealed: referenceSeal({ chat_id: 123456789 }, purpose, subject, botId) },
+    } });
+    assert.deepEqual(result.outcome, { kind: "rejected_by_host", reason: "blob_invalid" });
+  }
+  assert.deepEqual(requests, []);
   const rotated = createWebTgSupport({ ...config, keys: { ...config.keys, seal: { current: "Wxyz", keys: { ...config.keys.seal.keys, Wxyz: new Uint8Array(32).fill(7) } } } }, options);
   const afterRotation = await rotated.normalize(message(123456789));
   assert.equal(afterRotation.user, own.user);
@@ -440,6 +569,30 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   const privateChat = { sealed: own.chat };
   const groupThread = { sealed: topic.threadId };
   const bound = { ...command, binding: topic.binding };
+  requests.length = 0;
+  for (const method of ["getChat", "forwardMessage"]) {
+    const result = await tgSupport.execute({ ...command, method, attemptToken: randomBytes(16).toString("base64url"), params: { chat_id: privateChat } });
+    assert.deepEqual(result.outcome, { kind: "rejected_by_host", reason: "method_not_allowed" });
+    assert.deepEqual(requests, []);
+  }
+  const referenceOwnChat = { sealed: referenceSeal({ chat_id: 123456789 }, "private_chat", own.user) };
+  for (const params of [
+    { chat_id: { sealed: referenceSeal({ chat_id: -1005556667770 }, "group_chat", referenceToken("group", config.supportGroupId)) },
+      message_thread_id: groupThread, text: { template: "welcome_hint", language: { sealed: own.language } } },
+    { chat_id: { sealed: referenceSeal({ chat_id: 987654321 }, "private_chat", own.user) },
+      text: { template: "welcome_hint", language: { sealed: own.language } } },
+    { chat_id: referenceOwnChat, message_thread_id: groupThread,
+      text: { template: "welcome_hint", language: { sealed: own.language } } },
+  ]) {
+    const result = await tgSupport.execute({ ...bound, method: "sendMessage", attemptToken: randomBytes(16).toString("base64url"), params });
+    assert.deepEqual(result.outcome, { kind: "rejected_by_host", reason: "addressee_not_allowed" });
+    assert.deepEqual(requests, []);
+  }
+  assert.equal((await tgSupport.execute({ ...command, method: "sendMessage", attemptToken: randomBytes(16).toString("base64url"), params: {
+    chat_id: referenceOwnChat, text: { template: "welcome_hint", language: { sealed: own.language } },
+  } })).outcome.kind, "success");
+  assert.equal(requests[0].body.chat_id, 123456789);
+  requests.length = 0;
   returnedMessageId = 42;
   const groupCopy = await tgSupport.execute({ ...bound, params: {
     chat_id: groupChat, message_thread_id: groupThread, from_chat_id: privateChat, message_id: { sealed: own.messageId },
@@ -450,6 +603,9 @@ test("command authorization prevents another user's ciphertext reaching Telegram
     text: { template: "topic_header", language: { sealed: own.language }, user: privateChat },
   } });
   assert.equal(header.outcome.kind, "success");
+  assert.equal(header.outcome.created.message, referenceToken("message", config.supportGroupId, 42));
+  assert.deepEqual(referenceOpen(header.outcome.created.messageId, "message_id", own.user), { message_id: 42, chat_id: config.supportGroupId });
+  assert.equal(header.outcome.created.binding, null);
   returnedMessageId = 777;
   const groupCommands = (messageId) => [
     ["copy source", "copyMessage", { chat_id: privateChat, from_chat_id: groupChat, message_id: messageId }],
@@ -571,6 +727,13 @@ test("command authorization prevents another user's ciphertext reaching Telegram
   assert.equal(requests[1].body.chat_id, config.supportGroupId);
   assert.deepEqual(requests[1].body.reply_parameters, { message_id: 42 });
   assert.equal(requests[1].body.text.includes("Fetched"), true);
+  requests.length = 0;
+  profileFailure = true;
+  const missingProfile = await profiledTgSupport.execute({ ...profiledHeader, attemptToken: randomBytes(16).toString("base64url"), params: {
+    ...profiledHeader.params, reply_to_message_id: { sealed: groupCopy.outcome.created.messageId },
+  } });
+  assert.deepEqual(missingProfile.outcome, { kind: "telegram_error", errorCode: 403, description: "Forbidden: profile unavailable", retryAfter: null });
+  assert.deepEqual(requests, [{ path: "/bot12345:telegram-test-token/getChat", body: { chat_id: 123456789 } }]);
 });
 
 test("unknown and wrong-slot template IDs are rejected without reaching Telegram", async () => {
@@ -602,7 +765,11 @@ test("unknown and wrong-slot template IDs are rejected without reaching Telegram
 test("explicit configuration and execution preserve profile topic tags and the pinned-header mention", async () => {
   const seen = [];
   let configured;
-  const options = { clock: { now: () => 1700000000000 }, resolveProfile: async () => ({ firstName: "Changed", username: "current" }), fetch: async (request) => {
+  let profileState = "found";
+  const options = { clock: { now: () => 1700000000000 }, resolveProfile: async () => {
+    if (profileState === "throws") throw new Error("External profile provider failed");
+    return profileState === "missing" ? null : { firstName: "Changed", username: "current" };
+  }, fetch: async (request) => {
     const method = new URL(request.url).pathname.split("/").at(-1);
     const body = await request.json();
     if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
@@ -626,6 +793,30 @@ test("explicit configuration and execution preserve profile topic tags and the p
   assert.equal(seen[1].body.message_thread_id, 55);
   assert.equal(seen[1].body.entities[0].url, "tg://user?id=123456789");
   assert.equal(seen[1].body.text.includes("Changed @current (#u123456789)"), true);
+  seen.length = 0;
+  profileState = "throws";
+  for (const [method, params] of [
+    ["createForumTopic", { chat_id: { sealed: configured.group_chat }, name: { template: "topic_title", ...profile } }],
+    ["sendMessage", { chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: result.outcome.created.threadId }, text: { template: "topic_header", ...profile } }],
+  ]) {
+    const failed = await tgSupport.execute({ ...common, attemptToken: randomBytes(16).toString("base64url"), method, params });
+    assert.equal(failed.outcome.kind, "transport_error");
+    assert.deepEqual(seen, []);
+  }
+  profileState = "missing";
+  const nameless = await tgSupport.execute({ ...common, attemptToken: randomBytes(16).toString("base64url"), method: "createForumTopic", params: {
+    chat_id: { sealed: configured.group_chat }, name: { template: "topic_title", ...profile },
+  } });
+  assert.equal(nameless.outcome.kind, "success");
+  assert.equal(seen[0].body.name, "(#u123456789)");
+  const namelessHeader = await tgSupport.execute({ ...common, attemptToken: randomBytes(16).toString("base64url"), method: "sendMessage", params: {
+    chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: nameless.outcome.created.threadId }, text: { template: "topic_header", ...profile },
+  } });
+  assert.equal(namelessHeader.outcome.kind, "success");
+  assert.equal(seen[1].body.text.startsWith("Пользователь: 👤 123456789 (#u123456789)"), true);
+  assert.deepEqual(seen[1].body.entities, [{ type: "text_link", offset: 17, length: 9, url: "tg://user?id=123456789" }]);
+  assert.equal(seen[1].body.text.includes("Changed"), false);
+  assert.equal(seen[1].body.text.includes("Old"), false);
 });
 
 test("a notice reply copies the operator message to its user and topic while preserving notice and user binding", async () => {
@@ -660,16 +851,31 @@ test("a notice reply copies the operator message to its user and topic while pre
     chat_id: { sealed: configured.group_chat }, name: { template: "topic_title", ...reference(own) },
   } });
   assert.equal(topic.outcome.kind, "success", JSON.stringify(topic.outcome));
+  assert.equal(topic.outcome.created.kind, "topic");
+  assert.equal(topic.outcome.created.thread, referenceToken("thread", config.supportGroupId, 55));
+  assert.deepEqual(referenceOpen(topic.outcome.created.threadId, "thread_id", own.user), { thread_id: 55 });
+  assert.deepEqual(referenceOpen(topic.outcome.created.binding, "binding", own.user), { kind: "topic",
+    thread: referenceToken("thread", config.supportGroupId, 55), user: own.user });
   const notifications = await tgSupport.execute({ ...common, method: "createForumTopic", params: {
     chat_id: { sealed: configured.group_chat }, name: { template: "notifications_topic_title", language: { sealed: own.language } },
   } });
   assert.equal(notifications.outcome.kind, "success", JSON.stringify(notifications.outcome));
+  assert.equal(notifications.outcome.created.kind, "topic");
+  assert.equal(notifications.outcome.created.thread, referenceToken("thread", config.supportGroupId, 56));
+  assert.deepEqual(referenceOpen(notifications.outcome.created.threadId, "thread_id", referenceToken("group", config.supportGroupId)), { thread_id: 56 });
+  assert.throws(() => referenceOpen(notifications.outcome.created.threadId, "thread_id", own.user));
+  assert.equal(notifications.outcome.created.binding, null);
   const notice = async (event) => tgSupport.execute({ ...common, subject: event.user, method: "sendMessage", params: {
     chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: notifications.outcome.created.threadId },
     text: { template: "new_user_notice", ...reference(event) },
   } });
   const notified = await notice(own);
   assert.equal(notified.outcome.kind, "success");
+  assert.equal(notified.outcome.created.kind, "message");
+  assert.equal(notified.outcome.created.message, referenceToken("message", config.supportGroupId, 700));
+  assert.deepEqual(referenceOpen(notified.outcome.created.messageId, "message_id", own.user), { message_id: 700, chat_id: config.supportGroupId });
+  assert.deepEqual(referenceOpen(notified.outcome.created.binding, "binding", own.user), { kind: "notice",
+    notice: referenceToken("message", config.supportGroupId, 700), user: own.user });
   const reply = await tgSupport.normalize({ update_id: 999, message: {
     message_id: 701, message_thread_id: 56, chat: { id: config.supportGroupId, type: "supergroup" },
     from: { id: 555, is_bot: false }, reply_to_message: { message_id: 700 }, text: "Operator answer",
@@ -681,9 +887,16 @@ test("a notice reply copies the operator message to its user and topic while pre
   } };
   const delivered = await tgSupport.execute(command);
   assert.equal(delivered.outcome.kind, "success");
-  assert.equal((await tgSupport.execute({ ...command, params: { ...command.params,
+  assert.equal(delivered.outcome.created.message, referenceToken("message", 123456789, 900));
+  assert.deepEqual(referenceOpen(delivered.outcome.created.messageId, "message_id", own.user), { message_id: 900, chat_id: 123456789 });
+  assert.equal(delivered.outcome.created.binding, null);
+  const projected = await tgSupport.execute({ ...command, params: { ...command.params,
     chat_id: { sealed: configured.group_chat }, message_thread_id: { sealed: topic.outcome.created.threadId },
-  } })).outcome.kind, "success");
+  } });
+  assert.equal(projected.outcome.kind, "success");
+  assert.equal(projected.outcome.created.message, referenceToken("message", config.supportGroupId, 900));
+  assert.deepEqual(referenceOpen(projected.outcome.created.messageId, "message_id", own.user), { message_id: 900, chat_id: config.supportGroupId });
+  assert.equal(projected.outcome.created.binding, null);
   assert.deepEqual(seen.filter((item) => item.method === "copyMessage"), [
     { method: "copyMessage", body: { chat_id: 123456789, from_chat_id: config.supportGroupId, message_id: 701 } },
     { method: "copyMessage", body: { chat_id: config.supportGroupId, message_thread_id: 55, from_chat_id: config.supportGroupId, message_id: 701 } },
