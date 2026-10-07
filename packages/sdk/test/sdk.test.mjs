@@ -267,7 +267,7 @@ test("reactions copy the whole sealed list and clearing it through authenticated
   assert.deepEqual(calls, []);
 });
 
-test("normalization matches independent LP32BE HMAC vectors and performs no startup I/O", async () => {
+test("normalization matches independent LP32BE HMAC vectors and performs no startup I/O", async t => {
   const tgSupport = createWebTgSupport(config, { fetch: async () => { throw new Error("Unexpected network access"); } });
   const event = await tgSupport.normalize({
     update_id: 101,
@@ -292,6 +292,28 @@ test("normalization matches independent LP32BE HMAC vectors and performs no star
   assert.deepEqual(JSON.parse(Buffer.concat([decipher.update(ciphertext.subarray(0, -16)), decipher.final()]).toString("utf8")), { chat_id: 123456789 });
   const original = { message_id: 909, date: 333, chat: { id: 123456789, type: "private" },
     from: { id: 123456789, is_bot: false, first_name: "Private name", last_name: "Private surname", username: "private_handle", language_code: "rus" }, text: "Unique private text" };
+  const { text: _text, ...privateMessage } = original;
+  await t.test("a human private chat-background service message produces no event", async () => {
+    assert.equal(await tgSupport.normalize({ update_id: 917, message: { ...privateMessage,
+      chat_background_set: { type: { type: "fill", fill: { type: "solid", color: 0 }, dark_theme_dimming: 0 } },
+    } }), null);
+  });
+  await t.test("a human private gift service message produces no event", async () => {
+    assert.equal(await tgSupport.normalize({ update_id: 918, message: { ...privateMessage,
+      gift: { gift: { id: "regular-gift", star_count: 10, sticker: { file_id: "gift-sticker", file_unique_id: "gift-sticker-unique",
+        type: "regular", width: 512, height: 512, is_animated: false, is_video: false } } },
+    } }), null);
+  });
+  for (const [updateId, content, copyable] of [
+    [919, { photo: [{ file_id: "user-photo", file_unique_id: "user-photo-unique", width: 512, height: 512 }] }, true],
+    [920, { invoice: { title: "Forwarded invoice", description: "Product", start_parameter: "product", currency: "XTR", total_amount: 10 } }, false],
+    [921, { giveaway: { chats: [{ id: config.supportGroupId, type: "supergroup", title: "Giveaway group" }], winners_selection_date: 333, winner_count: 1 } }, false],
+    [922, { future_user_content: { value: "Future ordinary content" } }, false],
+  ]) {
+    const normalized = await tgSupport.normalize({ update_id: updateId, message: { ...privateMessage, ...content } });
+    assert.equal(normalized?.type, "user_message");
+    assert.equal(normalized.copyable, copyable);
+  }
   const support = { ...original, message_thread_id: 555, chat: { id: config.supportGroupId, type: "supergroup" }, from: { ...original.from, id: 987654321 } };
   const updates = [
     { update_id: 910, message: original },
