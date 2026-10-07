@@ -144,6 +144,10 @@ Private and support reaction updates carry the complete new list in a sealed blo
 
 Support edits and reactions seal their content under the source message token. Commands consuming them provide `source_message_id`: the sealed ID already stored for the group side of the message pair. A THREAD- or notice-scoped source ID also requires its existing topic or notice binding. The SDK authenticates this proof for the command's user, checks its group chat and opens content only for that message; the target message ID is checked against the destination chat separately. Private USER-scoped content omits `source_message_id`.
 
+When changing the support group, increase `configRevision`, restart the Host with the new `supportGroupId`, and explicitly retain the former IDs in `previousSupportGroupIds`, for example `previousSupportGroupIds: [oldSupportGroupId]`. Store this list with your Host configuration so it survives every restart. The constructor validates and copies it; changing the caller's array later does not change the SDK's permissions. This list is local to the Host and is not sent to the Service.
+
+The Service keeps pending private copies, edits and reactions for operator replies already accepted from the previous group. The SDK permits those groups only as authenticated sources for the command's own private-chat user, using the original topic or notice binding. Every group destination remains the current `supportGroupId`; new updates from previous groups are ignored. With no history list, previous groups are rejected. Keep a previous ID permitted while its pending deliveries must still succeed, and retain the original Host keys. Returning to a former group creates fresh user topics.
+
 Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; never remove any old entries.
 
 Run deployment configuration explicitly:
