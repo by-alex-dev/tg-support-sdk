@@ -300,6 +300,10 @@ test("normalization matches independent LP32BE HMAC vectors and performs no star
   assert.equal(event?.type, "user_message");
   // Fixed separately with Python's hashlib/hmac and UTF-8 byte lengths, not with SDK helpers.
   assert.equal(event.user, "g8M2OyR9FtTozaq8_Z_0vzJcrh8QUds6vY5A6ylWLm0");
+  const forgotten = await tgSupport.userForget(123456789);
+  assert.equal(forgotten.type, "user_forget");
+  assert.equal(forgotten.user, "g8M2OyR9FtTozaq8_Z_0vzJcrh8QUds6vY5A6ylWLm0");
+  assert.equal(JSON.stringify(forgotten).includes("123456789"), false);
   assert.equal(event.message, "LMrOtEnUUwyuHxFhej1I89AWNVlFVT6GgdjiLXJOsFM");
   assert.equal(event.profile, "dfa-VNF3my9FDXYQKIYmWPxUlRtZrvkoeIJ-BfeZAtk");
   const vectors = JSON.parse(readFileSync(new URL("../../../conformance/vectors/tokens.json", import.meta.url), "utf8")).vectors;
