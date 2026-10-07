@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac, createDecipheriv, createCipheriv, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createWebTgSupport, configure, ServiceError } from "tg-support-sdk";
+import { createWebTgSupport, configure, ConfigError, ServiceError } from "tg-support-sdk";
 
 // Independent protocol reference: LP32BE frames and Node's HMAC/AES-GCM.
 const referenceFrames = (parts) => Buffer.concat(parts.flatMap((part) => {
@@ -817,11 +817,16 @@ test("explicit configuration and execution preserve profile topic tags and the p
   assert.deepEqual(seen[1].body.entities, [{ type: "text_link", offset: 17, length: 9, url: "tg://user?id=123456789" }]);
   assert.equal(seen[1].body.text.includes("Changed"), false);
   assert.equal(seen[1].body.text.includes("Old"), false);
+  for (const previousSupportGroupIds of [[0], [1], [-1.5], [Number.MIN_SAFE_INTEGER - 1], ["-100123"],
+    "-100123", { 0: config.supportGroupId }, null]) {
+    assert.throws(() => createWebTgSupport({ ...config, previousSupportGroupIds }, options), ConfigError);
+  }
 });
 
-test("a notice reply copies the operator message to its user and topic while preserving notice and user binding", async () => {
+test("a notice reply copies the operator message to its user and topic while preserving notice and user binding", async t => {
   const now = 1700000000000;
   const seen = [];
+  const botCalls = [];
   let configured;
   let threadId = 55;
   let noticeId = 700;
@@ -829,8 +834,9 @@ test("a notice reply copies the operator message to its user and topic while pre
     const method = new URL(request.url).pathname.split("/").at(-1);
     const body = await request.json();
     if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
+    botCalls.push({ method, body });
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
-    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: body.chat_id, type: "supergroup", is_forum: true } });
     if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
     seen.push({ method, body });
     if (method === "createForumTopic") return Response.json({ ok: true, result: { message_thread_id: threadId++ } });
@@ -943,6 +949,107 @@ test("a notice reply copies the operator message to its user and topic while pre
     assert.equal(seen.length, count, "N700 authorizes M701 only for the bound user");
     assert.equal((await tgSupport.execute(recipe)).outcome.kind, "success");
     assert.deepEqual(seen.at(-1), { method, body: { chat_id: 123456789, message_id: 900, ...expected } });
+  }
+
+  const oldGroupChat = configured.group_chat;
+  const pending = await tgSupport.normalize({ update_id: 1003, message: {
+    message_id: 702, message_thread_id: 56, chat: { id: config.supportGroupId, type: "supergroup" },
+    from: { id: 555, is_bot: false }, reply_to_message: { message_id: 700 }, text: "Pending old answer",
+  } });
+  assert.equal(pending.type, "support_message");
+  const pendingCopy = { ...command, params: { ...command.params, message_id: { sealed: pending.replyScopedMessageId } } };
+  const privateEdit = { ...common, binding: notified.outcome.created.binding, method: "editMessageText",
+    params: { ...target, content: { sealed: edited.content } } };
+  const privateReaction = { ...common, binding: notified.outcome.created.binding, method: "setMessageReaction",
+    params: { ...target, reaction: { sealed: reacted.reactions } } };
+  const nextGroup = -1009876543210, foreignGroup = -1005555555555;
+  const previousSupportGroupIds = [config.supportGroupId];
+  const switched = { ...enabled, supportGroupId: nextGroup, previousSupportGroupIds, configRevision: 2 };
+  await configure(switched, options);
+  const currentGroupChat = configured.group_chat;
+  assert.equal(Object.hasOwn(configured, "previousSupportGroupIds"), false);
+  assert.equal(Object.hasOwn(configured, "previous_support_group_ids"), false);
+  const restarted = createWebTgSupport(switched, options);
+  previousSupportGroupIds.length = 0;
+  previousSupportGroupIds.push(foreignGroup);
+  const noHistory = createWebTgSupport({ ...enabled, supportGroupId: nextGroup, configRevision: 2 }, options);
+  let nextAttempt = 100;
+  const authenticated = async (client, recipe) => {
+    const sequence = nextAttempt++;
+    const wire = { op_id: String(sequence), attempt_token: Buffer.alloc(16, sequence).toString("base64url"),
+      deadline_seconds: 60, subject: recipe.subject, method: recipe.method, params: recipe.params, binding: recipe.binding };
+    const bytes = Buffer.from(JSON.stringify({ kind: "commands", commands: [wire] }));
+    const timestamp = String(now / 1000);
+    const url = new URL(config.transport.hostUrl);
+    const signature = createHmac("sha256", Buffer.alloc(32)).update(`TGS1-REQ\n${timestamp}\nPOST\n${url.pathname}${url.search}\n`).update(bytes).digest("hex");
+    const received = await client.receivePush(new Request(config.transport.hostUrl, { method: "POST", body: bytes, headers: {
+      "Content-Type": "application/json", "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}`,
+    } }));
+    assert.equal(received.response.status, 202);
+    assert.equal(received.commands.length, 1);
+    return client.execute(received.commands[0]);
+  };
+  for (const [name, recipe, expected] of [
+    ["pending private copy survives a restart with explicit previous source permission", pendingCopy,
+      { method: "copyMessage", body: { chat_id: 123456789, from_chat_id: config.supportGroupId, message_id: 702 } }],
+    ["private edit retains its old source and Notice authority after restart", privateEdit,
+      { method: "editMessageText", body: { chat_id: 123456789, message_id: 900, text: "Changed Notifications reply <&>" } }],
+    ["private reaction retains its old source and Notice authority after restart", privateReaction,
+      { method: "setMessageReaction", body: { chat_id: 123456789, message_id: 900, reaction: [{ type: "emoji", emoji: "👍" }] } }],
+  ]) {
+    const deniedAt = botCalls.length;
+    assert.deepEqual((await authenticated(noHistory, recipe)).outcome, { kind: "rejected_by_host", reason: "blob_invalid" });
+    assert.equal(botCalls.length, deniedAt, "Absent history keeps the old source unauthorized");
+    await t.test(name, async () => {
+      const before = botCalls.length;
+      const result = await authenticated(restarted, recipe);
+      assert.equal(result.outcome.kind, "success");
+      assert.deepEqual(botCalls.slice(before), [expected]);
+    });
+  }
+  const welcome = { ...common, method: "sendMessage", params: { chat_id: { sealed: own.chat },
+    text: { template: "welcome_hint", language: { sealed: own.language } } } };
+  const welcomeAt = botCalls.length;
+  assert.equal((await authenticated(restarted, welcome)).outcome.kind, "success");
+  assert.equal(botCalls.length, welcomeAt + 1);
+  assert.equal(botCalls.at(-1).method, "sendMessage");
+  assert.equal(botCalls.at(-1).body.chat_id, 123456789);
+
+  const currentNotifications = await authenticated(restarted, { ...common, method: "createForumTopic", params: {
+    chat_id: { sealed: currentGroupChat }, name: { template: "notifications_topic_title", language: { sealed: own.language } },
+  } });
+  assert.equal(currentNotifications.outcome.kind, "success");
+  const foreign = { ...enabled, supportGroupId: foreignGroup, configRevision: 3 };
+  await configure(foreign, options);
+  const foreignGroupChat = configured.group_chat;
+  const foreignClient = createWebTgSupport(foreign, options);
+  const foreignTopic = await authenticated(foreignClient, { ...common, method: "createForumTopic", params: {
+    chat_id: { sealed: foreignGroupChat }, name: { template: "topic_title", ...reference(own) },
+  } });
+  assert.equal(foreignTopic.outcome.kind, "success");
+  const foreignSource = await foreignClient.normalize({ update_id: 1004, message: {
+    message_id: 703, message_thread_id: threadId - 1, chat: { id: foreignGroup, type: "supergroup" },
+    from: { id: 555, is_bot: false }, text: "Foreign operator answer",
+  } });
+  assert.equal(foreignSource.type, "support_message");
+  const invalid = [
+    ["caller mutation cannot grant an unapproved source", { ...pendingCopy, binding: foreignTopic.outcome.created.binding,
+      params: { ...pendingCopy.params, from_chat_id: { sealed: foreignGroupChat }, message_id: { sealed: foreignSource.messageId } } }],
+    ["previous groups remain forbidden destinations", { ...pendingCopy, params: { ...pendingCopy.params,
+      chat_id: { sealed: oldGroupChat }, message_thread_id: { sealed: topic.outcome.created.threadId } } }],
+    ["old sources cannot feed a current-group destination", { ...pendingCopy, params: { ...pendingCopy.params,
+      chat_id: { sealed: currentGroupChat }, message_thread_id: { sealed: currentNotifications.outcome.created.threadId } } }],
+    ["history does not authorize another private user", { ...pendingCopy, params: { ...pendingCopy.params, chat_id: { sealed: other.chat } } }],
+    ["history does not authorize another user's binding", { ...pendingCopy, binding: anotherUser.outcome.created.binding }],
+    ["history does not open the wrong sealed purpose", { ...pendingCopy, params: { ...pendingCopy.params, message_id: { sealed: own.language } } }],
+    ["source chat must match the authenticated message payload", { ...pendingCopy, params: { ...pendingCopy.params, from_chat_id: { sealed: currentGroupChat } } }],
+    ["edit content must belong to its actual source message", { ...privateEdit, params: { ...privateEdit.params,
+      source_message_id: { sealed: pending.replyScopedMessageId } } }],
+  ];
+  for (const [name, recipe] of invalid) {
+    const before = botCalls.length;
+    assert.equal((await authenticated(restarted, recipe)).outcome.kind, "rejected_by_host", name);
+    assert.equal(botCalls.length, before, `${name}: no Telegram HTTP request`);
   }
 });
 
