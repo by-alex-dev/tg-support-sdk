@@ -13,6 +13,8 @@ const validators = createBrowserProtocolValidators();
 
 export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: BotApi, options: TgSupportOptions) {
   const clock = options.clock ?? { now: () => Date.now() };
+  const currentGroupIds = [config.supportGroupId];
+  const sourceGroupIds = [...new Set([...currentGroupIds, ...(config.previousSupportGroupIds ?? [])])];
   const operationResult = (command: Command, outcome: TgSupportOutcome): TgSupportEvent => ({ type: "operation_result", eventId: `r-${command.attemptToken}`, opId: command.opId, attemptToken: command.attemptToken, outcome });
   const apiError = (outcome: Extract<BotApiOutcome, { ok: false }>): TgSupportOutcome => outcome.kind === "telegram"
     ? { kind: "telegram_error", errorCode: outcome.errorCode, description: outcome.description, retryAfter: outcome.retryAfter }
@@ -53,13 +55,13 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         binding = validated.value;
       }
       const sealed = (value: unknown): string => { const object = record(value); if (typeof object?.sealed !== "string") throw new Rejected("malformed"); return object.sealed; };
-      const address = async (value: unknown, groupOnly = false): Promise<{ kind: "group" | "private"; id: number }> => {
+      const address = async (value: unknown, groupOnly = false, allowedGroupIds: readonly number[] = currentGroupIds): Promise<{ kind: "group" | "private"; id: number }> => {
         const blob = sealed(value);
-        const group = await keys.open("group_chat", [groupToken], blob);
+        const group = await keys.open("group_chat", await Promise.all(allowedGroupIds.map((id) => keys.token("group", id))), blob);
         if (group.ok) {
           const checked = validators.parse("GroupChatPayload", group.value);
           if (!checked.ok) throw new Rejected("malformed");
-          if (checked.value.chat_id !== config.supportGroupId) throw new Rejected("addressee_not_allowed");
+          if (!allowedGroupIds.includes(checked.value.chat_id) || await keys.token("group", checked.value.chat_id) !== group.subject) throw new Rejected("addressee_not_allowed");
           return { kind: "group", id: checked.value.chat_id };
         }
         if (group.error === "unknown_kid") throw new Rejected("unknown_kid");
@@ -73,7 +75,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
       };
       const chat = await address(params.chat_id, command.method === "createForumTopic" || command.method === "editForumTopic" || command.method === "unpinAllForumTopicMessages");
       const subjects = (slot: string, fromGroup = false, replyThread: string | null = null): string[] => [command.subject,
-        ...(binding?.kind === "topic" && (["message_thread_id", "message_id", "content", "reaction"].includes(slot) ||
+        ...(binding?.kind === "topic" && (["message_thread_id", "message_id"].includes(slot) ||
           slot === "reply_to_message_id" && chat.kind === "group" && binding.thread === replyThread) ? [binding.thread] : []),
         ...(binding?.kind === "notice" && slot === "message_id" && fromGroup ? [binding.notice] : []),
         ...(slot === "message_thread_id" ? [groupToken] : [])];
@@ -88,13 +90,23 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         if (binding?.kind === "topic" && opened.subject === binding.thread && await keys.token("thread", config.supportGroupId, checked.value.thread_id) !== binding.thread) throw new Rejected("binding_invalid");
         return checked.value.thread_id;
       };
-      const messageId = async (value: unknown, slot: string, expectedChatId: number, fromGroup = false, replyThread: string | null = null): Promise<number> => {
+      const openMessageId = async (value: unknown, slot: string, fromGroup = false, replyThread: string | null = null) => {
         const opened = await keys.open("message_id", subjects(slot, fromGroup, replyThread), sealed(value));
         if (!opened.ok) throw new Rejected(opened.error);
         const checked = validators.parse("MessageIdPayload", opened.value);
         if (!checked.ok) throw new Rejected("malformed");
-        if (checked.value.chat_id !== expectedChatId) throw new Rejected("blob_invalid");
-        return checked.value.message_id;
+        return checked.value;
+      };
+      const messageId = async (value: unknown, slot: string, expectedChatId: number, fromGroup = false, replyThread: string | null = null): Promise<number> => {
+        const payload = await openMessageId(value, slot, fromGroup, replyThread);
+        if (payload.chat_id !== expectedChatId) throw new Rejected("blob_invalid");
+        return payload.message_id;
+      };
+      const sourceSubjects = async (): Promise<string[]> => {
+        if (params.source_message_id === undefined) return [command.subject];
+        const payload = await openMessageId(params.source_message_id, "message_id", true);
+        if (!(chat.kind === "private" ? sourceGroupIds : currentGroupIds).includes(payload.chat_id)) throw new Rejected("blob_invalid");
+        return [await keys.token("message", payload.chat_id, payload.message_id)];
       };
       const reply = async (threadId: number | undefined) => {
         if (params.reply_to_message_id == null) return {};
@@ -132,7 +144,7 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         case "editForumTopic": { const id = await thread(true); if (id === undefined) throw new Rejected("malformed"); request = { method: "editForumTopic", params: { chat_id: chat.id, message_thread_id: id, name: (await render(params.name, ["topic_title"])).text } }; break; }
         case "unpinAllForumTopicMessages": { const id = await thread(true); if (id === undefined) throw new Rejected("malformed"); request = { method: "unpinAllForumTopicMessages", params: { chat_id: chat.id, message_thread_id: id } }; break; }
         case "copyMessage": {
-          const id = await thread(chat.kind === "group"); const from = await address(params.from_chat_id);
+          const id = await thread(chat.kind === "group"); const from = await address(params.from_chat_id, false, chat.kind === "private" ? sourceGroupIds : currentGroupIds);
           request = { method: "copyMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), from_chat_id: from.id, message_id: await messageId(params.message_id, "message_id", from.id, from.kind === "group"), ...await reply(id) } }; break;
         }
         case "sendMessage": {
@@ -145,14 +157,14 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
           request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...replyParams } }; break;
         }
         case "editMessageText": {
-          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
+          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", await sourceSubjects(), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
           const checked = validators.parse("TextEditPayload", opened.value); if (!checked.ok) throw new Rejected("malformed");
           const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; const preview = checked.value.link_preview_options ? jsonRecord(checked.value.link_preview_options) : null;
           if ((checked.value.entities && !entities) || (checked.value.link_preview_options && !preview)) throw new Rejected("malformed");
           request = { method: "editMessageText", params: { chat_id: chat.id, message_id: id, text: checked.value.text, ...(entities ? { entities } : {}), ...(preview ? { link_preview_options: preview } : {}) } }; break;
         }
         case "editMessageCaption": {
-          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", subjects("content"), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
+          const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", await sourceSubjects(), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
           const checked = validators.parse("CaptionEditPayload", opened.value); if (!checked.ok) throw new Rejected("malformed");
           const entities = checked.value.caption_entities ? jsonRecords(checked.value.caption_entities) : null; if (checked.value.caption_entities && !entities) throw new Rejected("malformed");
           request = { method: "editMessageCaption", params: { chat_id: chat.id, message_id: id, caption: checked.value.caption, ...(entities ? { caption_entities: entities } : {}), ...(typeof checked.value.show_caption_above_media === "boolean" ? { show_caption_above_media: checked.value.show_caption_above_media } : {}) } }; break;
@@ -160,10 +172,12 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         case "deleteMessage": request = { method: "deleteMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id) } }; break;
         case "pinChatMessage": request = { method: "pinChatMessage", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id), ...(typeof params.disable_notification === "boolean" ? { disable_notification: params.disable_notification } : {}) } }; break;
         case "setMessageReaction": {
+          const id = await messageId(params.message_id, "message_id", chat.id);
+          const authorizedSubjects = await sourceSubjects();
           let reaction: readonly Record<string, Json>[];
           if (params.reaction === "👀") reaction = [{ type: "emoji", emoji: "👀" }];
-          else { const opened = await keys.open("reactions", subjects("reaction"), sealed(params.reaction)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("ReactionsPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const values = jsonRecords(checked.value.reaction); if (!values) throw new Rejected("malformed"); reaction = values; }
-          request = { method: "setMessageReaction", params: { chat_id: chat.id, message_id: await messageId(params.message_id, "message_id", chat.id), reaction } }; break;
+          else { const opened = await keys.open("reactions", authorizedSubjects, sealed(params.reaction)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("ReactionsPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const values = jsonRecords(checked.value.reaction); if (!values) throw new Rejected("malformed"); reaction = values; }
+          request = { method: "setMessageReaction", params: { chat_id: chat.id, message_id: id, reaction } }; break;
         }
         default: { const exhaustive: never = command.method; throw new Error(exhaustive); }
       }

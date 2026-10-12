@@ -21,6 +21,6 @@ async function main(): Promise<void> {
   console.log("tg-support configuration registered.");
 }
 main().catch((error: unknown) => {
-  console.error(error instanceof StartupError ? `Configuration failed: ${error.problems.join(", ")}` : "Configuration failed. Check the config module and host secrets.");
+  console.error(error instanceof StartupError ? error.message : "Configuration failed. Check the config module and host secrets.");
   process.exitCode = 1;
 });

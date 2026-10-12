@@ -617,9 +617,6 @@
         "group": {
           "$ref": "#/definitions/Token"
         },
-        "thread": {
-          "$ref": "#/definitions/Token"
-        },
         "message": {
           "$ref": "#/definitions/Token"
         },
@@ -631,7 +628,6 @@
         "type",
         "event_id",
         "group",
-        "thread",
         "message",
         "reactions"
       ],
@@ -1427,6 +1423,9 @@
         "message_id": {
           "$ref": "#/definitions/SealedRef"
         },
+        "source_message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
         "content": {
           "$ref": "#/definitions/SealedRef"
         }
@@ -1446,6 +1445,9 @@
           "$ref": "#/definitions/SealedRef"
         },
         "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "source_message_id": {
           "$ref": "#/definitions/SealedRef"
         },
         "content": {
@@ -1484,6 +1486,9 @@
           "$ref": "#/definitions/SealedRef"
         },
         "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "source_message_id": {
           "$ref": "#/definitions/SealedRef"
         },
         "reaction": {
@@ -1916,6 +1921,11 @@
           "kind": "sealed",
           "purpose": "message_id"
         },
+        "source_message_id": {
+          "kind": "sealed",
+          "purpose": "message_id",
+          "optional": true
+        },
         "content": {
           "kind": "sealed",
           "purpose": "edit_content",
@@ -1937,6 +1947,11 @@
         "message_id": {
           "kind": "sealed",
           "purpose": "message_id"
+        },
+        "source_message_id": {
+          "kind": "sealed",
+          "purpose": "message_id",
+          "optional": true
         },
         "content": {
           "kind": "sealed",
@@ -1976,6 +1991,11 @@
         "message_id": {
           "kind": "sealed",
           "purpose": "message_id"
+        },
+        "source_message_id": {
+          "kind": "sealed",
+          "purpose": "message_id",
+          "optional": true
         },
         "reaction": {
           "kind": "reaction",

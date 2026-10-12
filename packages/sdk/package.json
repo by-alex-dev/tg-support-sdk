@@ -1,9 +1,9 @@
 {
   "name": "tg-support-sdk",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "type": "module",
-  "files": ["dist", "README.md", "THIRD_PARTY_NOTICES"],
-  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
+  "files": ["dist", "README.md", "CHANGELOG.md", "RELEASE.md", "THIRD_PARTY_NOTICES"],
+  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}, "./grammy": {"types": "./dist/grammy.d.ts", "default": "./dist/grammy.js"}},
   "bin": {"tg-support-sdk": "./dist/cli.js"},
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -11,8 +11,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
+    "grammy": "1.46.0",
     "tg-support-protocol": "0.1.0",
     "esbuild": "0.28.2",
     "typescript": "6.0.3"
-  }
+  },
+  "peerDependencies": {"grammy": "^1.46.0"},
+  "peerDependenciesMeta": {"grammy": {"optional": true}}
 }

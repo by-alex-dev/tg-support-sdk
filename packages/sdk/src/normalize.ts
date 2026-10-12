@@ -1,9 +1,75 @@
 import { record, integer, jsonRecords, jsonRecord } from "./parse.ts";
+import metadata from "../package.json" with { type: "json" };
 import type { Keyring } from "./crypto.ts";
 import type { FormattedText, Json, TgSupportEvent, TgSupportConfig, TelegramUserProfile } from "./types.ts";
+import type { Message } from "grammy/types";
 
-const serviceFields = ["new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo", "delete_chat_photo", "group_chat_created", "supergroup_chat_created", "channel_chat_created", "message_auto_delete_timer_changed", "migrate_to_chat_id", "migrate_from_chat_id", "pinned_message", "successful_payment", "refunded_payment", "users_shared", "chat_shared", "write_access_allowed", "video_chat_scheduled", "video_chat_started", "video_chat_ended", "video_chat_participants_invited", "web_app_data", "forum_topic_created", "forum_topic_closed", "forum_topic_reopened", "forum_topic_edited", "general_forum_topic_hidden", "general_forum_topic_unhidden"];
+type MessageContentField = keyof Pick<Message,
+  "text" | "entities" | "rich_message" | "animation" | "audio" | "document" | "live_photo" | "paid_media" |
+  "photo" | "sticker" | "story" | "video" | "video_note" | "voice" | "contact" | "dice" | "game" | "poll" |
+  "venue" | "location" | "checklist" | "suggested_post_info" | "invoice" | "giveaway" | "giveaway_winners"
+>;
+// Telegram's ServiceMessage type is the shared envelope, including for ordinary invoices and giveaways.
+type ServiceMessageField = Exclude<keyof Message, keyof Message.MediaMessage | MessageContentField>;
+const serviceFields = Object.keys({
+  chat_owner_left: true,
+  chat_owner_changed: true,
+  new_chat_members: true,
+  left_chat_member: true,
+  new_chat_title: true,
+  new_chat_photo: true,
+  delete_chat_photo: true,
+  group_chat_created: true,
+  supergroup_chat_created: true,
+  channel_chat_created: true,
+  managed_bot_created: true,
+  message_auto_delete_timer_changed: true,
+  migrate_to_chat_id: true,
+  migrate_from_chat_id: true,
+  pinned_message: true,
+  successful_payment: true,
+  refunded_payment: true,
+  users_shared: true,
+  chat_shared: true,
+  gift: true,
+  unique_gift: true,
+  gift_upgrade_sent: true,
+  connected_website: true,
+  write_access_allowed: true,
+  passport_data: true,
+  proximity_alert_triggered: true,
+  boost_added: true,
+  chat_background_set: true,
+  checklist_tasks_done: true,
+  checklist_tasks_added: true,
+  community_chat_added: true,
+  community_chat_joined: true,
+  community_chat_removed: true,
+  direct_message_price_changed: true,
+  forum_topic_created: true,
+  forum_topic_closed: true,
+  forum_topic_reopened: true,
+  forum_topic_edited: true,
+  general_forum_topic_hidden: true,
+  general_forum_topic_unhidden: true,
+  giveaway_created: true,
+  giveaway_completed: true,
+  paid_message_price_changed: true,
+  poll_option_added: true,
+  poll_option_deleted: true,
+  suggested_post_approved: true,
+  suggested_post_approval_failed: true,
+  suggested_post_declined: true,
+  suggested_post_paid: true,
+  suggested_post_refunded: true,
+  video_chat_scheduled: true,
+  video_chat_started: true,
+  video_chat_ended: true,
+  video_chat_participants_invited: true,
+  web_app_data: true,
+} satisfies Record<ServiceMessageField, true>);
 const copyableFields = ["text", "photo", "audio", "video", "voice", "video_note", "animation", "document", "sticker", "contact", "location", "venue", "poll", "dice"];
+const captionableFields = ["photo", "audio", "video", "voice", "animation", "document"];
 export function createNormalizer(config: TgSupportConfig, botId: number, keys: Keyring) {
   const profileFields = async (id: number, profile: TelegramUserProfile) => {
     const user = await keys.token("user", id);
@@ -30,23 +96,25 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
         if (serviceFields.some((field) => message[field] !== undefined)) return null;
         const personal = chat.type === "private" && chat.id === from.id;
         const threadId = integer(message.message_thread_id) && message.message_thread_id > 1 ? message.message_thread_id : null;
-        const support = chat.type === "supergroup" && chat.id === config.supportGroupId && threadId !== null;
+        const support = chat.type === "supergroup" && chat.id === config.supportGroupId && (reaction !== null || threadId !== null);
         if (!personal && !support) return null;
-        const subject = personal ? await keys.token("user", from.id) : await keys.token("thread", chat.id, threadId ?? 0);
         const id = await eventId(update.update_id); const token = await keys.token("message", chat.id, message.message_id);
         if (reaction) {
+          const subject = personal ? await keys.token("user", from.id) : token;
           const values = jsonRecords(reaction.new_reaction); if (!values) return null;
           const reactions = await keys.seal("reactions", subject, { reaction: values });
-          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, reactions };
+          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), message: token, reactions };
         }
+        const subject = personal ? await keys.token("user", from.id) : await keys.token("thread", chat.id, threadId ?? 0);
         if (edited) {
           if (!integer(message.edit_date) || message.edit_date < 0) return null;
-          const field = typeof message.text === "string" ? "text" : typeof message.caption === "string" ? "caption" : null; if (!field) return null;
-          const content: Record<string, Json> = field === "text" ? { field, text: String(message.text) } : { field, caption: String(message.caption) };
+          const field = typeof message.text === "string" ? "text" : typeof message.caption === "string" ||
+            message.caption === undefined && captionableFields.some((name) => message[name] !== undefined) ? "caption" : null; if (!field) return null;
+          const content: Record<string, Json> = field === "text" ? { field, text: String(message.text) } : { field, caption: typeof message.caption === "string" ? message.caption : "" };
           const entities = jsonRecords(field === "text" ? message.entities : message.caption_entities); if (entities) content[field === "text" ? "entities" : "caption_entities"] = entities;
           const preview = jsonRecord(message.link_preview_options); if (field === "text" && preview) content.link_preview_options = preview;
           if (field === "caption" && typeof message.show_caption_above_media === "boolean") content.show_caption_above_media = message.show_caption_above_media;
-          const sealed = await keys.seal("edit_content", subject, content); const revision = { editDate: message.edit_date, updateId: update.update_id };
+          const sealed = await keys.seal("edit_content", personal ? subject : token, content); const revision = { editDate: message.edit_date, updateId: update.update_id };
           return personal ? { type: "user_edit", eventId: id, user: subject, message: token, revision, field, content: sealed } : { type: "support_edit", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, revision, field, content: sealed };
         }
         const replied = record(message.reply_to_message); const replyTo = integer(replied?.message_id) ? await keys.token("message", chat.id, replied.message_id) : null;
@@ -66,7 +134,7 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
     async userForget(userId: number): Promise<TgSupportEvent> { return { type: "user_forget", eventId: crypto.randomUUID(), user: await keys.token("user", userId) }; },
     async botConfigured(): Promise<TgSupportEvent> {
       const group = await keys.token("group", config.supportGroupId);
-      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: "tg-support-sdk/0.3.1", configRevision: config.configRevision };
+      return { type: "bot_configured", eventId: `c-${config.configRevision}-${crypto.randomUUID().slice(0, 8)}`, telegramBotId: botId, group, groupChat: await keys.seal("group_chat", group, { chat_id: config.supportGroupId }), features: { ...config.features }, transport: config.transport.kind, hostUrl: config.transport.kind === "push" ? config.transport.hostUrl : null, deadlineSeconds: config.attemptDeadlineSeconds ?? 60, sdkVersion: `tg-support-sdk/${metadata.version}`, configRevision: config.configRevision };
     },
   };
 }
