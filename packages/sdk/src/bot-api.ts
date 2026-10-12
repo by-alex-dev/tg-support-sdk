@@ -5,7 +5,8 @@ export function fetchBotApi(input: { token: string; fetch?: Fetch }): BotApi {
   const fetcher = input.fetch ?? ((request: Request) => fetch(request));
   const request = async (method: string, params: unknown): Promise<{ ok: true; result: unknown } | Extract<BotApiOutcome, { ok: false }>> => {
     try {
-      const response = await fetcher(new Request(`https://api.telegram.org/bot${input.token}/${method}`, { method: "POST", body: JSON.stringify(params), headers: { "Content-Type": "application/json" }, redirect: "error" }));
+      const response = await fetcher(new Request(`https://api.telegram.org/bot${input.token}/${method}`, { method: "POST", body: JSON.stringify(params), headers: { "Content-Type": "application/json" }, redirect: "manual" }));
+      if (response.status >= 300 && response.status < 400) return { ok: false, kind: "transport", description: "Telegram request failed." };
       const body = record(await response.json());
       if (body?.ok === true) return { ok: true, result: body.result };
       const parameters = record(body?.parameters);

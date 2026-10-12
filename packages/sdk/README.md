@@ -1,6 +1,6 @@
 # tg-support-sdk
 
-SDK 1.0.0 is prepared in source and has not been published. Its public API retains the 0.5.0 signatures; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Human publication, Vislaw adoption and real Telegram verification remain pending; follow [RELEASE.md](RELEASE.md).
+SDK 1.0.1 is prepared in source and has not been published. Its public API retains the 1.0.0 signatures; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
 
 > **Back up `token_key` outside the Host before connecting a Bot. It is the only key to that Bot's state: losing it loses every Topic and Message link. It cannot be rotated.**
 >
@@ -14,7 +14,7 @@ The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypt
 
 Start with a separate Telegram Bot token held only by your Host. Open the tg-support Service bot, send `/start`, accept the published `/terms`, then obtain legitimate paid access or redeem a prepared Invite with `/invite <code>`. Create a Bot using `/newbot <name>` and save the one-time signing secret as `TG_SUPPORT_SECRET` before its message disappears after ten minutes. Account access and plan limits are enforced by the deployed Service; this guide does not grant them. Never send the Telegram Bot token or Host keys to the Service bot.
 
-After a human publishes this release, install `npm install --save-exact tg-support-sdk@1.0.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
+After this release is published, install `npm install --save-exact tg-support-sdk@1.0.1`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
 
 ```ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
