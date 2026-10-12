@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {"lib": ["ES2023", "DOM", "DOM.Iterable"], "types": [], "rootDir": "src", "outDir": "dist", "rewriteRelativeImportExtensions": true},
+  "compilerOptions": {"lib": ["ES2023", "DOM", "DOM.Iterable"], "types": [], "rootDir": "src", "outDir": "dist", "rewriteRelativeImportExtensions": true, "resolveJsonModule": true},
   "include": ["src/**/*.ts"],
   "exclude": ["src/cli.ts"]
 }
