@@ -1,6 +1,12 @@
 # Changelog
 
-## 1.0.0 — prepared, not published
+## 1.0.1 — prepared, not published
+
+- Fix Service requests and native Bot API calls on Cloudflare Workers, where `Request` rejects `redirect: "error"` before fetching. Both clients use `redirect: "manual"` and reject every 3xx response without following its Location or forwarding credentials. A successful-looking Bot API body on a redirect is also rejected.
+- Add a regression through the built public SDK in workerd, checking successful outbound requests and rejection of HTTP 301, 302, 303, 307 and 308 for both clients.
+- Public API, protocol v1, Host keys and configuration remain compatible with 1.0.0.
+
+## 1.0.0 — published 2026-10-07
 
 The public API is stabilized without breaking changes from 0.5.0. Existing Host configuration, keys, signing-secret format and protocol v1 data remain compatible. No key rotation or state migration is required by this release.
 
@@ -13,4 +19,4 @@ The public API is stabilized without breaking changes from 0.5.0. Existing Host 
 - Service messages are filtered against the grammY Message fields while ordinary invoice, giveaway and suggested-post content continues to produce normalized user events.
 - Optional `previousSupportGroupIds` explicitly permits former groups as sources of pending private operator copies, edits and reactions after a group switch. Group destinations remain current, and the existing user and binding checks apply.
 
-Publication is a human action. Vislaw's registry dependency and live onboarding/Telegram checks follow publication; this source preparation does not claim those native #43 gates are complete.
+Publication and Host adoption remain separate from source preparation; release artifacts do not replace live onboarding and Telegram verification.

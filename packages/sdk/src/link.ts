@@ -61,7 +61,8 @@ export function createServiceLink(config: TgSupportConfig, options: TgSupportOpt
     const timestamp = String(Math.floor(clock.now() / 1000));
     try {
       const signature = hex(await hmac(await key, canonical("REQ", timestamp, "POST", path(url), bytes)));
-      return await fetcher(new Request(url, { method: "POST", body: bytes, redirect: "error", headers: { "Content-Type": "application/json", "X-Tg-Support-Bot": secret.botId, "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}` } }));
+      const response = await fetcher(new Request(url, { method: "POST", body: bytes, redirect: "manual", headers: { "Content-Type": "application/json", "X-Tg-Support-Bot": secret.botId, "X-Tg-Support-Timestamp": timestamp, "X-Tg-Support-Signature": `v1=${signature}` } }));
+      return response.status >= 300 && response.status < 400 ? null : response;
     } catch { return null; }
   };
   return {

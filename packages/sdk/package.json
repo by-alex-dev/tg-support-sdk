@@ -1,6 +1,6 @@
 {
   "name": "tg-support-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "files": ["dist", "README.md", "CHANGELOG.md", "RELEASE.md", "THIRD_PARTY_NOTICES"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}, "./grammy": {"types": "./dist/grammy.d.ts", "default": "./dist/grammy.js"}},
@@ -14,7 +14,8 @@
     "grammy": "1.46.0",
     "tg-support-protocol": "0.1.0",
     "esbuild": "0.28.2",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "miniflare": "5.20261006.1-alpha"
   },
   "peerDependencies": {"grammy": "^1.46.0"},
   "peerDependenciesMeta": {"grammy": {"optional": true}}
