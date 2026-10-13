@@ -103,7 +103,7 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
           const subject = personal ? await keys.token("user", from.id) : token;
           const values = jsonRecords(reaction.new_reaction); if (!values) return null;
           const reactions = await keys.seal("reactions", subject, { reaction: values });
-          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), message: token, reactions };
+          return personal ? { type: "user_reaction", eventId: id, user: subject, message: token, reactions, cleared: values.length === 0 } : { type: "support_reaction", eventId: id, group: await keys.token("group", chat.id), message: token, reactions };
         }
         const subject = personal ? await keys.token("user", from.id) : await keys.token("thread", chat.id, threadId ?? 0);
         if (edited) {

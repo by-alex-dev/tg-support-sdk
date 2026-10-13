@@ -290,6 +290,45 @@ test("reactions copy the whole sealed list and clearing it through authenticated
   assert.deepEqual(calls, []);
 });
 
+test("a user reaction is announced in the topic as a reply to the operator message and the notice is edited in place", async () => {
+  const reacted = { ...config, templates: { languages: ["ru", "en"], fallback: "en", overrides: {
+    user_reacted: { en: ({ reactions, language }) => ({ text: `Host ${language}: ${reactions}` }) } } } };
+  for (const [configuration, first, second] of [
+    [config, "Пользователь отреагировал: ❤ (своя реакция)", "Пользователь отреагировал: 👍"],
+    [reacted, "Host en: ❤ (custom reaction)", "Host en: 👍"],
+  ]) {
+    const { client, user, command, groupChat, topic, calls } = await correspondenceHost(configuration);
+    const operator = await client.normalize({ update_id: 1200, message: { message_id: 40, date: 1, chat: { id: config.supportGroupId, type: "supergroup" },
+      from: { id: 555, is_bot: false }, message_thread_id: 55, is_topic_message: true, text: "Operator answer" } });
+    const reaction = (id, list) => client.normalize({ update_id: 1210 + list.length, message_reaction: {
+      chat: { id, type: "private" }, message_id: 700, user: { id, is_bot: false }, date: 100, old_reaction: [], new_reaction: list } });
+    const set = await reaction(123456789, [{ type: "emoji", emoji: "❤" }, { type: "custom_emoji", custom_emoji_id: "999123456789000" }]);
+    const changed = await reaction(123456789, [{ type: "emoji", emoji: "👍" }]);
+    const removed = await reaction(123456789, []);
+    assert.deepEqual([set.cleared, changed.cleared, removed.cleared], [false, false, true]);
+    for (const plaintext of ["❤", "👍", "999123456789000"]) assert.equal(JSON.stringify([set, changed]).includes(plaintext), false);
+    const text = (event) => ({ template: "user_reacted", language: { sealed: user.language }, reactions: { sealed: event.reactions } });
+    const notice = { ...command, binding: topic.binding, method: "sendMessage", params: { chat_id: { sealed: groupChat }, message_thread_id: { sealed: topic.threadId },
+      text: text(set), reply_to_message_id: { sealed: operator.messageId } } };
+    const sent = await client.execute(notice);
+    assert.equal(sent.outcome.kind, "success");
+    assert.deepEqual(calls, [{ method: "sendMessage", params: { chat_id: config.supportGroupId, message_thread_id: 55, text: first, reply_parameters: { message_id: 40 } } }]);
+    const edit = { ...command, method: "editMessageText", params: { chat_id: { sealed: groupChat }, message_id: { sealed: sent.outcome.created.messageId }, text: text(changed) } };
+    assert.equal((await client.execute(edit)).outcome.kind, "success");
+    assert.deepEqual(calls.at(-1), { method: "editMessageText", params: { chat_id: config.supportGroupId, message_id: 700, text: second } });
+    const other = await correspondenceHost(configuration, 987654321);
+    const foreign = await other.client.normalize({ update_id: 1230, message_reaction: { chat: { id: 987654321, type: "private" }, message_id: 1,
+      user: { id: 987654321, is_bot: false }, date: 100, old_reaction: [], new_reaction: [{ type: "emoji", emoji: "🔥" }] } });
+    calls.length = 0;
+    for (const [invalid, reason] of [
+      [{ ...notice, params: { ...notice.params, text: text(foreign) } }, "blob_invalid"],
+      [{ ...notice, params: { ...notice.params, text: text(removed) } }, "malformed"],
+      [{ ...edit, params: { ...edit.params, content: { sealed: set.reactions } } }, "malformed"],
+    ]) assert.deepEqual((await client.execute(invalid)).outcome, { kind: "rejected_by_host", reason });
+    assert.deepEqual(calls, []);
+  }
+});
+
 test("normalization matches independent LP32BE HMAC vectors and performs no startup I/O", async t => {
   const tgSupport = createWebTgSupport(config, { fetch: async () => { throw new Error("Unexpected network access"); } });
   const event = await tgSupport.normalize({

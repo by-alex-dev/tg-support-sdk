@@ -1,6 +1,6 @@
 # tg-support-sdk
 
-SDK 1.0.1 is prepared in source and has not been published. Its public API retains the 1.0.0 signatures; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
+This is SDK 1.1.0. It keeps the 1.0 public API and adds the `user_reacted` topic notice; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
 
 > **Back up `token_key` outside the Host before connecting a Bot. It is the only key to that Bot's state: losing it loses every Topic and Message link. It cannot be rotated.**
 >
@@ -14,7 +14,7 @@ The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypt
 
 Start with a separate Telegram Bot token held only by your Host. Open the tg-support Service bot, send `/start`, accept the published `/terms`, then obtain legitimate paid access or redeem a prepared Invite with `/invite <code>`. Create a Bot using `/newbot <name>` and save the one-time signing secret as `TG_SUPPORT_SECRET` before its message disappears after ten minutes. Account access and plan limits are enforced by the deployed Service; this guide does not grant them. Never send the Telegram Bot token or Host keys to the Service bot.
 
-After this release is published, install `npm install --save-exact tg-support-sdk@1.0.1`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
+Install `npm install --save-exact tg-support-sdk@1.1.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
 
 ```ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
@@ -130,7 +130,7 @@ After deploying Pages, run the explicit `configure` step below with the same key
 
 For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter. Both constructors accept a `fetch(Request)` function, a millisecond `clock.now()`, a logger for structured diagnostic codes, and an optional `resolveProfile(userId)`. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link. The executor assembles only the closed method's named Telegram parameters.
 
-`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId }`. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal.
+`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal.
 
 Language selection uses an exact match, then the base language, then `fallback`. If an override lacks that translation but has a fallback-language translation, the fallback callback receives the fallback language. A template without an override keeps its SDK text. Unknown or wrong-slot template IDs are rejected before Telegram is called.
 

@@ -287,7 +287,7 @@ function validate18(data, { instancePath = "", parentData, parentDataProperty, r
   return errors === 0;
 }
 var TemplateId = validate19;
-var schema20 = { "type": "string", "enum": ["topic_title", "topic_header", "new_user_notice", "notifications_topic_title", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"], "title": "TemplateId" };
+var schema20 = { "type": "string", "enum": ["topic_title", "topic_header", "new_user_notice", "notifications_topic_title", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support", "user_reacted"], "title": "TemplateId" };
 function validate19(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
@@ -300,7 +300,7 @@ function validate19(data, { instancePath = "", parentData, parentDataProperty, r
     }
     errors++;
   }
-  if (!(data === "topic_title" || data === "topic_header" || data === "new_user_notice" || data === "notifications_topic_title" || data === "welcome_hint" || data === "user_edited" || data === "edited_by_support" || data === "replaced_by_support")) {
+  if (!(data === "topic_title" || data === "topic_header" || data === "new_user_notice" || data === "notifications_topic_title" || data === "welcome_hint" || data === "user_edited" || data === "edited_by_support" || data === "replaced_by_support" || data === "user_reacted")) {
     const err1 = { instancePath, schemaPath: "#/enum", keyword: "enum", params: { allowedValues: schema20.enum }, message: "must be equal to one of the allowed values" };
     if (vErrors === null) {
       vErrors = [err1];
@@ -2394,12 +2394,23 @@ function validate33(data, { instancePath = "", parentData, parentDataProperty, r
         errors++;
       }
     }
+    if (data.cleared !== void 0) {
+      if (typeof data.cleared !== "boolean") {
+        const err17 = { instancePath: instancePath + "/cleared", schemaPath: "#/properties/cleared/type", keyword: "type", params: { type: "boolean" }, message: "must be boolean" };
+        if (vErrors === null) {
+          vErrors = [err17];
+        } else {
+          vErrors.push(err17);
+        }
+        errors++;
+      }
+    }
   } else {
-    const err17 = { instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" }, message: "must be object" };
+    const err18 = { instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" }, message: "must be object" };
     if (vErrors === null) {
-      vErrors = [err17];
+      vErrors = [err18];
     } else {
-      vErrors.push(err17);
+      vErrors.push(err18);
     }
     errors++;
   }
@@ -6437,7 +6448,7 @@ function validate85(data, { instancePath = "", parentData, parentDataProperty, r
   return errors === 0;
 }
 var TextTemplateRef = validate88;
-var schema133 = { "oneOf": [{ "type": "object", "properties": { "template": { "type": "string", "enum": ["topic_header", "new_user_notice"] }, "language": { "$ref": "#/definitions/SealedRef" }, "user": { "$ref": "#/definitions/SealedRef" } }, "required": ["template", "language", "user"], "additionalProperties": true }, { "type": "object", "properties": { "template": { "type": "string", "enum": ["welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"] }, "language": { "$ref": "#/definitions/SealedRef" } }, "required": ["template", "language"], "additionalProperties": true }], "title": "TextTemplateRef" };
+var schema133 = { "oneOf": [{ "type": "object", "properties": { "template": { "type": "string", "enum": ["topic_header", "new_user_notice"] }, "language": { "$ref": "#/definitions/SealedRef" }, "user": { "$ref": "#/definitions/SealedRef" } }, "required": ["template", "language", "user"], "additionalProperties": true }, { "type": "object", "properties": { "template": { "type": "string", "enum": ["welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"] }, "language": { "$ref": "#/definitions/SealedRef" } }, "required": ["template", "language"], "additionalProperties": true }, { "type": "object", "properties": { "template": { "type": "string", "enum": ["user_reacted"] }, "language": { "$ref": "#/definitions/SealedRef" }, "reactions": { "$ref": "#/definitions/SealedRef" } }, "required": ["template", "language", "reactions"], "additionalProperties": true }], "title": "TextTemplateRef" };
 function validate88(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
@@ -6585,13 +6596,94 @@ function validate88(data, { instancePath = "", parentData, parentDataProperty, r
       valid0 = true;
       passing0 = 1;
     }
+    const _errs14 = errors;
+    if (data && typeof data == "object" && !Array.isArray(data)) {
+      if (data.template === void 0) {
+        const err11 = { instancePath, schemaPath: "#/oneOf/2/required", keyword: "required", params: { missingProperty: "template" }, message: "must have required property 'template'" };
+        if (vErrors === null) {
+          vErrors = [err11];
+        } else {
+          vErrors.push(err11);
+        }
+        errors++;
+      }
+      if (data.language === void 0) {
+        const err12 = { instancePath, schemaPath: "#/oneOf/2/required", keyword: "required", params: { missingProperty: "language" }, message: "must have required property 'language'" };
+        if (vErrors === null) {
+          vErrors = [err12];
+        } else {
+          vErrors.push(err12);
+        }
+        errors++;
+      }
+      if (data.reactions === void 0) {
+        const err13 = { instancePath, schemaPath: "#/oneOf/2/required", keyword: "required", params: { missingProperty: "reactions" }, message: "must have required property 'reactions'" };
+        if (vErrors === null) {
+          vErrors = [err13];
+        } else {
+          vErrors.push(err13);
+        }
+        errors++;
+      }
+      if (data.template !== void 0) {
+        let data5 = data.template;
+        if (typeof data5 !== "string") {
+          const err14 = { instancePath: instancePath + "/template", schemaPath: "#/oneOf/2/properties/template/type", keyword: "type", params: { type: "string" }, message: "must be string" };
+          if (vErrors === null) {
+            vErrors = [err14];
+          } else {
+            vErrors.push(err14);
+          }
+          errors++;
+        }
+        if (!(data5 === "user_reacted")) {
+          const err15 = { instancePath: instancePath + "/template", schemaPath: "#/oneOf/2/properties/template/enum", keyword: "enum", params: { allowedValues: schema133.oneOf[2].properties.template.enum }, message: "must be equal to one of the allowed values" };
+          if (vErrors === null) {
+            vErrors = [err15];
+          } else {
+            vErrors.push(err15);
+          }
+          errors++;
+        }
+      }
+      if (data.language !== void 0) {
+        if (!validate21(data.language, { instancePath: instancePath + "/language", parentData: data, parentDataProperty: "language", rootData })) {
+          vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+          errors = vErrors.length;
+        }
+      }
+      if (data.reactions !== void 0) {
+        if (!validate21(data.reactions, { instancePath: instancePath + "/reactions", parentData: data, parentDataProperty: "reactions", rootData })) {
+          vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+          errors = vErrors.length;
+        }
+      }
+    } else {
+      const err16 = { instancePath, schemaPath: "#/oneOf/2/type", keyword: "type", params: { type: "object" }, message: "must be object" };
+      if (vErrors === null) {
+        vErrors = [err16];
+      } else {
+        vErrors.push(err16);
+      }
+      errors++;
+    }
+    var _valid0 = _errs14 === errors;
+    if (_valid0 && valid0) {
+      valid0 = false;
+      passing0 = [passing0, 2];
+    } else {
+      if (_valid0) {
+        valid0 = true;
+        passing0 = 2;
+      }
+    }
   }
   if (!valid0) {
-    const err11 = { instancePath, schemaPath: "#/oneOf", keyword: "oneOf", params: { passingSchemas: passing0 }, message: "must match exactly one schema in oneOf" };
+    const err17 = { instancePath, schemaPath: "#/oneOf", keyword: "oneOf", params: { passingSchemas: passing0 }, message: "must match exactly one schema in oneOf" };
     if (vErrors === null) {
-      vErrors = [err11];
+      vErrors = [err17];
     } else {
-      vErrors.push(err11);
+      vErrors.push(err17);
     }
     errors++;
   } else {
@@ -6607,8 +6699,8 @@ function validate88(data, { instancePath = "", parentData, parentDataProperty, r
   validate88.errors = vErrors;
   return errors === 0;
 }
-var TextRef = validate92;
-function validate92(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var TextRef = validate94;
+function validate94(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   const _errs0 = errors;
@@ -6647,11 +6739,11 @@ function validate92(data, { instancePath = "", parentData, parentDataProperty, r
       }
     }
   }
-  validate92.errors = vErrors;
+  validate94.errors = vErrors;
   return errors === 0;
 }
-var CreateForumTopicParams = validate95;
-function validate95(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var CreateForumTopicParams = validate97;
+function validate97(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -6694,11 +6786,11 @@ function validate95(data, { instancePath = "", parentData, parentDataProperty, r
     }
     errors++;
   }
-  validate95.errors = vErrors;
+  validate97.errors = vErrors;
   return errors === 0;
 }
-var EditForumTopicParams = validate98;
-function validate98(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var EditForumTopicParams = validate100;
+function validate100(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -6756,11 +6848,11 @@ function validate98(data, { instancePath = "", parentData, parentDataProperty, r
     }
     errors++;
   }
-  validate98.errors = vErrors;
+  validate100.errors = vErrors;
   return errors === 0;
 }
-var UnpinAllForumTopicMessagesParams = validate102;
-function validate102(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var UnpinAllForumTopicMessagesParams = validate104;
+function validate104(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -6803,11 +6895,11 @@ function validate102(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate102.errors = vErrors;
+  validate104.errors = vErrors;
   return errors === 0;
 }
-var SendMessageParams = validate105;
-function validate105(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var SendMessageParams = validate107;
+function validate107(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -6880,8 +6972,8 @@ function validate105(data, { instancePath = "", parentData, parentDataProperty, 
       }
     }
     if (data.text !== void 0) {
-      if (!validate92(data.text, { instancePath: instancePath + "/text", parentData: data, parentDataProperty: "text", rootData })) {
-        vErrors = vErrors === null ? validate92.errors : vErrors.concat(validate92.errors);
+      if (!validate94(data.text, { instancePath: instancePath + "/text", parentData: data, parentDataProperty: "text", rootData })) {
+        vErrors = vErrors === null ? validate94.errors : vErrors.concat(validate94.errors);
         errors = vErrors.length;
       }
     }
@@ -6938,11 +7030,11 @@ function validate105(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate105.errors = vErrors;
+  validate107.errors = vErrors;
   return errors === 0;
 }
-var CopyMessageParams = validate110;
-function validate110(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var CopyMessageParams = validate112;
+function validate112(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7088,11 +7180,11 @@ function validate110(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate110.errors = vErrors;
+  validate112.errors = vErrors;
   return errors === 0;
 }
-var EditMessageTextParams = validate116;
-function validate116(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var EditMessageTextContentParams = validate118;
+function validate118(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7156,11 +7248,126 @@ function validate116(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate116.errors = vErrors;
+  validate118.errors = vErrors;
   return errors === 0;
 }
-var EditMessageCaptionParams = validate121;
-function validate121(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var EditMessageTextTemplateParams = validate123;
+function validate123(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+  let vErrors = null;
+  let errors = 0;
+  if (data && typeof data == "object" && !Array.isArray(data)) {
+    if (data.chat_id === void 0) {
+      const err0 = { instancePath, schemaPath: "#/required", keyword: "required", params: { missingProperty: "chat_id" }, message: "must have required property 'chat_id'" };
+      if (vErrors === null) {
+        vErrors = [err0];
+      } else {
+        vErrors.push(err0);
+      }
+      errors++;
+    }
+    if (data.message_id === void 0) {
+      const err1 = { instancePath, schemaPath: "#/required", keyword: "required", params: { missingProperty: "message_id" }, message: "must have required property 'message_id'" };
+      if (vErrors === null) {
+        vErrors = [err1];
+      } else {
+        vErrors.push(err1);
+      }
+      errors++;
+    }
+    if (data.text === void 0) {
+      const err2 = { instancePath, schemaPath: "#/required", keyword: "required", params: { missingProperty: "text" }, message: "must have required property 'text'" };
+      if (vErrors === null) {
+        vErrors = [err2];
+      } else {
+        vErrors.push(err2);
+      }
+      errors++;
+    }
+    if (data.chat_id !== void 0) {
+      if (!validate21(data.chat_id, { instancePath: instancePath + "/chat_id", parentData: data, parentDataProperty: "chat_id", rootData })) {
+        vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+        errors = vErrors.length;
+      }
+    }
+    if (data.message_id !== void 0) {
+      if (!validate21(data.message_id, { instancePath: instancePath + "/message_id", parentData: data, parentDataProperty: "message_id", rootData })) {
+        vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+        errors = vErrors.length;
+      }
+    }
+    if (data.text !== void 0) {
+      if (!validate88(data.text, { instancePath: instancePath + "/text", parentData: data, parentDataProperty: "text", rootData })) {
+        vErrors = vErrors === null ? validate88.errors : vErrors.concat(validate88.errors);
+        errors = vErrors.length;
+      }
+    }
+  } else {
+    const err3 = { instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" }, message: "must be object" };
+    if (vErrors === null) {
+      vErrors = [err3];
+    } else {
+      vErrors.push(err3);
+    }
+    errors++;
+  }
+  validate123.errors = vErrors;
+  return errors === 0;
+}
+var EditMessageTextParams = validate127;
+function validate127(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+  let vErrors = null;
+  let errors = 0;
+  const _errs0 = errors;
+  let valid0 = false;
+  let passing0 = null;
+  const _errs1 = errors;
+  if (!validate118(data, { instancePath, parentData, parentDataProperty, rootData })) {
+    vErrors = vErrors === null ? validate118.errors : vErrors.concat(validate118.errors);
+    errors = vErrors.length;
+  }
+  var _valid0 = _errs1 === errors;
+  if (_valid0) {
+    valid0 = true;
+    passing0 = 0;
+  }
+  const _errs2 = errors;
+  if (!validate123(data, { instancePath, parentData, parentDataProperty, rootData })) {
+    vErrors = vErrors === null ? validate123.errors : vErrors.concat(validate123.errors);
+    errors = vErrors.length;
+  }
+  var _valid0 = _errs2 === errors;
+  if (_valid0 && valid0) {
+    valid0 = false;
+    passing0 = [passing0, 1];
+  } else {
+    if (_valid0) {
+      valid0 = true;
+      passing0 = 1;
+    }
+  }
+  if (!valid0) {
+    const err0 = { instancePath, schemaPath: "#/oneOf", keyword: "oneOf", params: { passingSchemas: passing0 }, message: "must match exactly one schema in oneOf" };
+    if (vErrors === null) {
+      vErrors = [err0];
+    } else {
+      vErrors.push(err0);
+    }
+    errors++;
+  } else {
+    errors = _errs0;
+    if (vErrors !== null) {
+      if (_errs0) {
+        vErrors.length = _errs0;
+      } else {
+        vErrors = null;
+      }
+    }
+  }
+  validate127.errors = vErrors;
+  return errors === 0;
+}
+var EditMessageCaptionParams = validate130;
+function validate130(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7224,11 +7431,11 @@ function validate121(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate121.errors = vErrors;
+  validate130.errors = vErrors;
   return errors === 0;
 }
-var DeleteMessageParams = validate126;
-function validate126(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var DeleteMessageParams = validate135;
+function validate135(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7271,11 +7478,11 @@ function validate126(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate126.errors = vErrors;
+  validate135.errors = vErrors;
   return errors === 0;
 }
-var SetMessageReactionParams = validate129;
-function validate129(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var SetMessageReactionParams = validate138;
+function validate138(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7377,11 +7584,11 @@ function validate129(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate129.errors = vErrors;
+  validate138.errors = vErrors;
   return errors === 0;
 }
-var PinChatMessageParams = validate134;
-function validate134(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var PinChatMessageParams = validate143;
+function validate143(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7435,11 +7642,11 @@ function validate134(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate134.errors = vErrors;
+  validate143.errors = vErrors;
   return errors === 0;
 }
-var PrivateChatPayload = validate137;
-function validate137(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var PrivateChatPayload = validate146;
+function validate146(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7493,11 +7700,11 @@ function validate137(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate137.errors = vErrors;
+  validate146.errors = vErrors;
   return errors === 0;
 }
-var GroupChatPayload = validate138;
-function validate138(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var GroupChatPayload = validate147;
+function validate147(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7551,11 +7758,11 @@ function validate138(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate138.errors = vErrors;
+  validate147.errors = vErrors;
   return errors === 0;
 }
-var MessageIdPayload = validate139;
-function validate139(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var MessageIdPayload = validate148;
+function validate148(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7630,11 +7837,11 @@ function validate139(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate139.errors = vErrors;
+  validate148.errors = vErrors;
   return errors === 0;
 }
-var ThreadIdPayload = validate140;
-function validate140(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var ThreadIdPayload = validate149;
+function validate149(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7668,11 +7875,11 @@ function validate140(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate140.errors = vErrors;
+  validate149.errors = vErrors;
   return errors === 0;
 }
-var LanguagePayload = validate141;
-function validate141(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var LanguagePayload = validate150;
+function validate150(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7743,11 +7950,11 @@ function validate141(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate141.errors = vErrors;
+  validate150.errors = vErrors;
   return errors === 0;
 }
-var TopicBinding = validate142;
-function validate142(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var TopicBinding = validate151;
+function validate151(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7842,11 +8049,11 @@ function validate142(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate142.errors = vErrors;
+  validate151.errors = vErrors;
   return errors === 0;
 }
-var NoticeBinding = validate143;
-function validate143(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var NoticeBinding = validate152;
+function validate152(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -7941,19 +8148,19 @@ function validate143(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate143.errors = vErrors;
+  validate152.errors = vErrors;
   return errors === 0;
 }
-var Binding = validate144;
-function validate144(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var Binding = validate153;
+function validate153(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   const _errs0 = errors;
   let valid0 = false;
   let passing0 = null;
   const _errs1 = errors;
-  if (!validate142(data, { instancePath, parentData, parentDataProperty, rootData })) {
-    vErrors = vErrors === null ? validate142.errors : vErrors.concat(validate142.errors);
+  if (!validate151(data, { instancePath, parentData, parentDataProperty, rootData })) {
+    vErrors = vErrors === null ? validate151.errors : vErrors.concat(validate151.errors);
     errors = vErrors.length;
   }
   var _valid0 = _errs1 === errors;
@@ -7962,8 +8169,8 @@ function validate144(data, { instancePath = "", parentData, parentDataProperty, 
     passing0 = 0;
   }
   const _errs2 = errors;
-  if (!validate143(data, { instancePath, parentData, parentDataProperty, rootData })) {
-    vErrors = vErrors === null ? validate143.errors : vErrors.concat(validate143.errors);
+  if (!validate152(data, { instancePath, parentData, parentDataProperty, rootData })) {
+    vErrors = vErrors === null ? validate152.errors : vErrors.concat(validate152.errors);
     errors = vErrors.length;
   }
   var _valid0 = _errs2 === errors;
@@ -7994,11 +8201,11 @@ function validate144(data, { instancePath = "", parentData, parentDataProperty, 
       }
     }
   }
-  validate144.errors = vErrors;
+  validate153.errors = vErrors;
   return errors === 0;
 }
-var TextEditPayload = validate147;
-function validate147(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var TextEditPayload = validate156;
+function validate156(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -8091,11 +8298,11 @@ function validate147(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate147.errors = vErrors;
+  validate156.errors = vErrors;
   return errors === 0;
 }
-var CaptionEditPayload = validate148;
-function validate148(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var CaptionEditPayload = validate157;
+function validate157(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -8186,11 +8393,11 @@ function validate148(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate148.errors = vErrors;
+  validate157.errors = vErrors;
   return errors === 0;
 }
-var EditContentPayload = validate149;
-function validate149(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var EditContentPayload = validate158;
+function validate158(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   const _errs0 = errors;
@@ -8409,11 +8616,11 @@ function validate149(data, { instancePath = "", parentData, parentDataProperty, 
       }
     }
   }
-  validate149.errors = vErrors;
+  validate158.errors = vErrors;
   return errors === 0;
 }
-var ReactionsPayload = validate150;
-function validate150(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var ReactionsPayload = validate159;
+function validate159(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -8482,11 +8689,11 @@ function validate150(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate150.errors = vErrors;
+  validate159.errors = vErrors;
   return errors === 0;
 }
-var NoticeTextPayload = validate151;
-function validate151(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
+var NoticeTextPayload = validate160;
+function validate160(data, { instancePath = "", parentData, parentDataProperty, rootData = data } = {}) {
   let vErrors = null;
   let errors = 0;
   if (data && typeof data == "object" && !Array.isArray(data)) {
@@ -8546,7 +8753,7 @@ function validate151(data, { instancePath = "", parentData, parentDataProperty, 
     }
     errors++;
   }
-  validate151.errors = vErrors;
+  validate160.errors = vErrors;
   return errors === 0;
 }
 var validators = {
@@ -8605,6 +8812,8 @@ var validators = {
   UnpinAllForumTopicMessagesParams,
   SendMessageParams,
   CopyMessageParams,
+  EditMessageTextContentParams,
+  EditMessageTextTemplateParams,
   EditMessageTextParams,
   EditMessageCaptionParams,
   DeleteMessageParams,
@@ -8657,7 +8866,9 @@ export {
   EditContentPayload,
   EditForumTopicParams,
   EditMessageCaptionParams,
+  EditMessageTextContentParams,
   EditMessageTextParams,
+  EditMessageTextTemplateParams,
   Event,
   EventBatch,
   EventId,

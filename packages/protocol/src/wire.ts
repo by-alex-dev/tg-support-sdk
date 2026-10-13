@@ -61,7 +61,8 @@ export type TemplateId =
   | "welcome_hint"
   | "user_edited"
   | "edited_by_support"
-  | "replaced_by_support";
+  | "replaced_by_support"
+  | "user_reacted";
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
  * via the `definition` "Method".
@@ -143,12 +144,23 @@ export type TextTemplateRef =
       template: "welcome_hint" | "user_edited" | "edited_by_support" | "replaced_by_support";
       language: SealedRef;
       [k: string]: unknown | undefined;
+    }
+  | {
+      template: "user_reacted";
+      language: SealedRef;
+      reactions: SealedRef;
+      [k: string]: unknown | undefined;
     };
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
  * via the `definition` "TextRef".
  */
 export type TextRef = SealedRef | TextTemplateRef;
+/**
+ * This interface was referenced by `ProtocolV1`'s JSON-Schema
+ * via the `definition` "EditMessageTextParams".
+ */
+export type EditMessageTextParams = EditMessageTextContentParams | EditMessageTextTemplateParams;
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
  * via the `definition` "Binding".
@@ -267,6 +279,7 @@ export interface UserReactionEvent {
   user: Token;
   message: Token;
   reactions: SealedBlob;
+  cleared?: boolean;
   [k: string]: unknown | undefined;
 }
 export interface SupportMessageEvent1 {
@@ -584,13 +597,23 @@ export interface CopyMessageParams {
 }
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
- * via the `definition` "EditMessageTextParams".
+ * via the `definition` "EditMessageTextContentParams".
  */
-export interface EditMessageTextParams {
+export interface EditMessageTextContentParams {
   chat_id: SealedRef;
   message_id: SealedRef;
   source_message_id?: SealedRef;
   content: SealedRef;
+  [k: string]: unknown | undefined;
+}
+/**
+ * This interface was referenced by `ProtocolV1`'s JSON-Schema
+ * via the `definition` "EditMessageTextTemplateParams".
+ */
+export interface EditMessageTextTemplateParams {
+  chat_id: SealedRef;
+  message_id: SealedRef;
+  text: TextTemplateRef;
   [k: string]: unknown | undefined;
 }
 /**
@@ -802,6 +825,8 @@ export interface SchemaTypes {
   UnpinAllForumTopicMessagesParams: UnpinAllForumTopicMessagesParams;
   SendMessageParams: SendMessageParams;
   CopyMessageParams: CopyMessageParams;
+  EditMessageTextContentParams: EditMessageTextContentParams;
+  EditMessageTextTemplateParams: EditMessageTextTemplateParams;
   EditMessageTextParams: EditMessageTextParams;
   EditMessageCaptionParams: EditMessageCaptionParams;
   DeleteMessageParams: DeleteMessageParams;

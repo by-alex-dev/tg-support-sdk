@@ -12,7 +12,7 @@ export type { Method, TemplateId, BlobPurpose, TokenPurpose };
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type TelegramUserProfile = { firstName?: string; lastName?: string; username?: string; languageCode?: string };
 export type FormattedText = { text: string; entities?: readonly Record<string, Json>[] };
-export type RenderContext = { profile: TelegramUserProfile | null; language: string; verifiedUserId: number | null };
+export type RenderContext = { profile: TelegramUserProfile | null; language: string; verifiedUserId: number | null; reactions: string | null };
 export type Render = (context: RenderContext) => FormattedText;
 export type TemplateConfig = { languages: readonly string[]; fallback: string; overrides?: Partial<Record<TemplateId, Partial<Record<string, Render>>>> };
 export type TgSupportKeys = { tokenKey: Uint8Array; seal: { current: string; keys: Readonly<Record<string, Uint8Array>> } };

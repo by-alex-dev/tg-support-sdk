@@ -132,11 +132,20 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
         }
         if (!id) throw new Rejected("unknown_template");
         templateId = id;
+        let reactions: readonly Record<string, Json>[] | null = null;
+        if (id === "user_reacted") {
+          const opened = await keys.open("reactions", [command.subject], sealed(ref.reactions));
+          if (!opened.ok) throw new Rejected(opened.error);
+          const checked = validators.parse("ReactionsPayload", opened.value);
+          const values = checked.ok ? jsonRecords(checked.value.reaction) : null;
+          if (!values || values.length === 0) throw new Rejected("malformed");
+          reactions = values;
+        }
         if (needsProfile && verifiedUserId !== null) {
           if (options.resolveProfile) profile = await options.resolveProfile(verifiedUserId);
           else { const response = await botApi.getProfile({ method: "getChat", chatId: verifiedUserId }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
         }
-        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, verifiedUserId);
+        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, verifiedUserId, reactions);
       };
       let request: TelegramRequest;
       switch (command.method) {
@@ -153,10 +162,11 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
           let text: FormattedText;
           const ref = record(params.text);
           if (ref?.sealed) { const opened = await keys.open("notice_text", [command.subject], sealed(params.text)); if (!opened.ok) throw new Rejected(opened.error); const checked = validators.parse("NoticeTextPayload", opened.value); if (!checked.ok) throw new Rejected("malformed"); const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; if (checked.value.entities && !entities) throw new Rejected("malformed"); text = { text: checked.value.text, ...(entities ? { entities } : {}) }; }
-          else text = await render(params.text, ["topic_header", "new_user_notice", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support"]);
+          else text = await render(params.text, ["topic_header", "new_user_notice", "welcome_hint", "user_edited", "edited_by_support", "replaced_by_support", "user_reacted"]);
           request = { method: "sendMessage", params: { chat_id: chat.id, ...(id !== undefined ? { message_thread_id: id } : {}), ...text, ...replyParams } }; break;
         }
         case "editMessageText": {
+          if (params.text !== undefined) { const id = await messageId(params.message_id, "message_id", chat.id); request = { method: "editMessageText", params: { chat_id: chat.id, message_id: id, ...await render(params.text, ["user_reacted"]) } }; break; }
           const id = await messageId(params.message_id, "message_id", chat.id); const opened = await keys.open("edit_content", await sourceSubjects(), sealed(params.content)); if (!opened.ok) throw new Rejected(opened.error);
           const checked = validators.parse("TextEditPayload", opened.value); if (!checked.ok) throw new Rejected("malformed");
           const entities = checked.value.entities ? jsonRecords(checked.value.entities) : null; const preview = checked.value.link_preview_options ? jsonRecord(checked.value.link_preview_options) : null;

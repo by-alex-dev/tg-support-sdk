@@ -82,7 +82,8 @@ export const METHOD_CATALOG = {
           "welcome_hint",
           "user_edited",
           "edited_by_support",
-          "replaced_by_support"
+          "replaced_by_support",
+          "user_reacted"
         ]
       },
       "reply_to_message_id": {
@@ -149,7 +150,15 @@ export const METHOD_CATALOG = {
       "content": {
         "kind": "sealed",
         "purpose": "edit_content",
-        "field": "text"
+        "field": "text",
+        "optional": true
+      },
+      "text": {
+        "kind": "template",
+        "templates": [
+          "user_reacted"
+        ],
+        "optional": true
       }
     }
   },

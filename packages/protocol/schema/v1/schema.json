@@ -74,7 +74,8 @@
         "welcome_hint",
         "user_edited",
         "edited_by_support",
-        "replaced_by_support"
+        "replaced_by_support",
+        "user_reacted"
       ],
       "title": "TemplateId"
     },
@@ -455,6 +456,9 @@
         },
         "reactions": {
           "$ref": "#/definitions/SealedBlob"
+        },
+        "cleared": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1266,6 +1270,29 @@
             "language"
           ],
           "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "enum": [
+                "user_reacted"
+              ]
+            },
+            "language": {
+              "$ref": "#/definitions/SealedRef"
+            },
+            "reactions": {
+              "$ref": "#/definitions/SealedRef"
+            }
+          },
+          "required": [
+            "template",
+            "language",
+            "reactions"
+          ],
+          "additionalProperties": true
         }
       ],
       "title": "TextTemplateRef"
@@ -1414,7 +1441,7 @@
       "additionalProperties": true,
       "title": "CopyMessageParams"
     },
-    "EditMessageTextParams": {
+    "EditMessageTextContentParams": {
       "type": "object",
       "properties": {
         "chat_id": {
@@ -1436,6 +1463,38 @@
         "content"
       ],
       "additionalProperties": true,
+      "title": "EditMessageTextContentParams"
+    },
+    "EditMessageTextTemplateParams": {
+      "type": "object",
+      "properties": {
+        "chat_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "message_id": {
+          "$ref": "#/definitions/SealedRef"
+        },
+        "text": {
+          "$ref": "#/definitions/TextTemplateRef"
+        }
+      },
+      "required": [
+        "chat_id",
+        "message_id",
+        "text"
+      ],
+      "additionalProperties": true,
+      "title": "EditMessageTextTemplateParams"
+    },
+    "EditMessageTextParams": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/EditMessageTextContentParams"
+        },
+        {
+          "$ref": "#/definitions/EditMessageTextTemplateParams"
+        }
+      ],
       "title": "EditMessageTextParams"
     },
     "EditMessageCaptionParams": {
@@ -1862,7 +1921,8 @@
             "welcome_hint",
             "user_edited",
             "edited_by_support",
-            "replaced_by_support"
+            "replaced_by_support",
+            "user_reacted"
           ]
         },
         "reply_to_message_id": {
@@ -1929,7 +1989,15 @@
         "content": {
           "kind": "sealed",
           "purpose": "edit_content",
-          "field": "text"
+          "field": "text",
+          "optional": true
+        },
+        "text": {
+          "kind": "template",
+          "templates": [
+            "user_reacted"
+          ],
+          "optional": true
         }
       }
     },
