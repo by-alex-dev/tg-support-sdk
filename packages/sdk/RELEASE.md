@@ -2,6 +2,8 @@
 
 1.1.0 was published on 2026-10-13; 1.2.0 is unreleased. The package remains the public, unscoped `tg-support-sdk`; the repository name is `tg-support`. Publication requires owner authorization for the reviewed release. A local artifact is not evidence of npm publication or a deployed Host.
 
+This maintainer guide is not part of the published package. The package README is the integrator guide shown on npm: keep maintainer, publication and repository-only instructions out of it, and do not link the private repository from it. Its TypeScript examples are compiled by `packages/sdk/test/readme.test.mjs`.
+
 Use a reviewed, clean commit and Node 24. From the repository root:
 
 ```sh
@@ -31,10 +33,10 @@ bash scripts/prepare-sdk-publish.sh
 
 Its stages verify the package/registry, guide npm login and 2FA, build/test/pack and show the file inventory and SHA-256, then ask for explicit confirmation before publishing that exact archive. Compare the displayed hash with the reviewed artifact. If it differs, stop and repeat the package/consumer checks on the changed bytes. The stable-semver identity check accepts 1.2.0. With explicit owner authorization, an agent may publish the reviewed archive through the configured npm identity; do not treat source preparation alone as publication authorization.
 
-After publication, verify `npm view tg-support-sdk@1.2.0 version dist.integrity dist.shasum --json --registry=https://registry.npmjs.org` against the reviewed manifest. 1.2.0 refuses a Bot without Pin Messages, so first confirm that the demo Bot has that permission in its support group; otherwise Vislaw's CI `configure` step fails with `bot_cannot_pin_messages`. Only then, in the Vislaw worktree, run:
+After publication, verify `npm view tg-support-sdk@1.2.0 version description dist.integrity dist.shasum --json --registry=https://registry.npmjs.org` against the reviewed manifest, and check that the npm package page shows the new README. 1.2.0 refuses a Bot without Pin Messages, so first confirm that the demo Bot has that permission in its support group; otherwise Vislaw's CI `configure` step fails with `bot_cannot_pin_messages`. Only then, in the Vislaw worktree, run:
 
 ```sh
 npm install --save-exact tg-support-sdk@1.2.0
 ```
 
-Commit its real registry-generated dependency/lock changes through the existing Vislaw PR, run that Host's checks and deploy using its authorized workflow. Do not prewrite a future registry URL or integrity value. Preserve the existing deployed SDK dependency until publication. Complete the real Telegram smoke and new-Bot onboarding from the integrator guide; these, publication and Vislaw adoption remain native #43 completion gates.
+Commit its real registry-generated dependency/lock changes through the existing Vislaw PR, run that Host's checks and deploy using its authorized workflow. Do not prewrite a future registry URL or integrity value. Preserve the existing deployed SDK dependency until publication. Complete the real Telegram smoke and onboard a new Bot to the stand using only the README on the npm package page; these, publication and Vislaw adoption remain native #43 completion gates.

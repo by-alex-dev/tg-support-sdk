@@ -1,8 +1,11 @@
 {
   "name": "tg-support-sdk",
   "version": "1.2.0",
+  "description": "Host SDK for tg-support: connect a Telegram bot so each user gets a topic in your support forum group and operators reply there.",
+  "homepage": "https://www.npmjs.com/package/tg-support-sdk",
+  "license": "UNLICENSED",
   "type": "module",
-  "files": ["dist", "README.md", "CHANGELOG.md", "RELEASE.md", "THIRD_PARTY_NOTICES"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "THIRD_PARTY_NOTICES"],
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}, "./grammy": {"types": "./dist/grammy.d.ts", "default": "./dist/grammy.js"}},
   "bin": {"tg-support-sdk": "./dist/cli.js"},
   "scripts": {
