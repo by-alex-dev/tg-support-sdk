@@ -1,6 +1,6 @@
 # tg-support-sdk
 
-This is SDK 1.1.0. It keeps the 1.0 public API and adds the `user_reacted` topic notice; [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
+This is SDK 1.2.0 (unreleased). It keeps the 1.0 public API, adds the `user_reacted` topic notice (1.1.0) and checks the Pin Messages permission at startup (1.2.0); [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
 
 > **Back up `token_key` outside the Host before connecting a Bot. It is the only key to that Bot's state: losing it loses every Topic and Message link. It cannot be rotated.**
 >
@@ -14,7 +14,7 @@ The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypt
 
 Start with a separate Telegram Bot token held only by your Host. Open the tg-support Service bot, send `/start`, accept the published `/terms`, then obtain legitimate paid access or redeem a prepared Invite with `/invite <code>`. Create a Bot using `/newbot <name>` and save the one-time signing secret as `TG_SUPPORT_SECRET` before its message disappears after ten minutes. Account access and plan limits are enforced by the deployed Service; this guide does not grant them. Never send the Telegram Bot token or Host keys to the Service bot.
 
-Install `npm install --save-exact tg-support-sdk@1.1.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
+Install `npm install --save-exact tg-support-sdk@1.2.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics and Pin Messages. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
 
 ```ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
@@ -156,7 +156,7 @@ Run deployment configuration explicitly:
 npx tg-support-sdk configure --config ./tg-support-config.mjs
 ```
 
-The module's default export is the same configuration passed to `createWebTgSupport`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator/topic permissions, then sends `bot_configured` to the service. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.
+The module's default export is the same configuration passed to `createWebTgSupport`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator, Manage Topics and Pin Messages permissions, then sends `bot_configured` to the service. Any failed check throws `StartupError` listing every problem with advice and sends nothing; for example, a bot without Pin Messages gets `bot_cannot_pin_messages` (without it the bot cannot unpin and pin topic headers), and the CLI exits with status 1. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.
 
 Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep every old seal key permanently. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
 
@@ -178,7 +178,7 @@ bot.use(tgSupport.middleware());
 await bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] });
 ```
 
-`start()` checks the bot and forum permissions, registers `bot_configured` and initializes grammY's bot identity. Calls sharing a startup wait for the same check; another call after successful startup does not register again. Before startup, `normalize` and `execute` throw `NotStartedError`; the command endpoint returns 503. The middleware sends normalized events and awaits `next()`. A failed send throws `ServiceError`, so the host can apply its update retry policy. Pass an `onEvents` callback to `middleware` to write events to an existing outbox instead. Do not install inline grammY retry or throttling transformers for support calls; the Service owns Telegram retry policy and quotas.
+`start()` runs the same checks as `configure` (including Pin Messages), registers `bot_configured` and initializes grammY's bot identity. Calls sharing a startup wait for the same check; another call after successful startup does not register again. Before startup, `normalize` and `execute` throw `NotStartedError`; the command endpoint returns 503. The middleware sends normalized events and awaits `next()`. A failed send throws `ServiceError`, so the host can apply its update retry policy. Pass an `onEvents` callback to `middleware` to write events to an existing outbox instead. Do not install inline grammY retry or throttling transformers for support calls; the Service owns Telegram retry policy and quotas.
 
 Use `handleCommandRequest` as the push endpoint, with the same `Request`, `Response` and optional `waitUntil` interface as the Web adapter. Telegram calls use `bot.api` and its transformers. Telegram errors preserve their code, description and `retry_after`; transport errors contain no external exception details.
 

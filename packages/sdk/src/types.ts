@@ -57,7 +57,7 @@ export type TelegramParams = {
   setMessageReaction: MessageTarget & { reaction: readonly Record<string, Json>[] };
   pinChatMessage: MessageTarget & { disable_notification?: boolean };
 };
-export type GroupFacts = { found: false } | { found: true; isForum: boolean; botStatus: string; canManageTopics: boolean };
+export type GroupFacts = { found: false } | { found: true; isForum: boolean; botStatus: string; canManageTopics: boolean; canPinMessages: boolean };
 export interface BotApi {
   call(request: TelegramRequest): Promise<BotApiOutcome>;
   getProfile(request: { method: "getChat"; chatId: number }): Promise<{ ok: true; profile: TelegramUserProfile } | Extract<BotApiOutcome, { ok: false }>>;
