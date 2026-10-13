@@ -15,6 +15,8 @@ TEST_DATABASE_URL=postgres://USER:PASSWORD@HOST:PORT/postgres npm test
 
 Use disposable PostgreSQL 18.6 for tests; each existing Service/HTTP owner creates and drops its own database. The workspace SDK, Service test dependency and smoke dependency must resolve to 1.2.0. The existing CI runs the full fake and conformance suite on that workspace version, including push, pull and grammY. The SDK tests also run the built public package in workerd to verify outbound requests and reject redirects. Before handoff, also install the actual packed tarball in a private consumer and run the same public SDK owners, packed declaration checks and real Service/PostgreSQL HTTP owners. Only external Telegram is replaced. Do not substitute an unpublished registry dependency for that local artifact.
 
+Before packing, replace `unreleased` in the `## 1.2.0 — unreleased` CHANGELOG heading with the release date (`## 1.2.0 — YYYY-MM-DD`): the changelog ships in the package. Both publication paths run `node scripts/check-sdk-changelog.mjs` and stop on an undated entry for the package version; after publication, date it by the npm registry time as `— published YYYY-MM-DD`.
+
 Pack without lifecycle scripts and retain its manifest:
 
 ```sh
