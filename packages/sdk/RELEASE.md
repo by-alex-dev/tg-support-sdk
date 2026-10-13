@@ -1,6 +1,6 @@
 # Preparing and publishing tg-support-sdk 1.2.0
 
-1.1.0 was published on 2026-10-13; 1.2.0 is unreleased. The package remains the public, unscoped `tg-support-sdk`; the repository name is `tg-support`. Publication requires owner authorization for the reviewed release. A local artifact is not evidence of npm publication or a deployed Host.
+1.2.0 was published on 2026-10-13 (registry time 2026-10-13T18:36:51Z, `latest`), packed from commit 51c4a1f after CI passed: integrity `sha512-CBgBUQlxmx4flWW4Y/L2yUKOyWOQOoU2yB5u8fu7DzOgxT4DqGvLBYZ2Pi8MzRfuCRgM7cvQW7tNsPcsuMnGCw==`, shasum `6d3612d2e3d2ce992ce801a0b24f452449131ce5`, sha256 `98eba03cd2e33e11f058c402790988db49ca120efa4d9d6d71448469bd55cf03`. 1.1.0 was published on 2026-10-13. The package remains the public, unscoped `tg-support-sdk`; the repository name is `tg-support`. Publication requires owner authorization for the reviewed release. A local artifact is not evidence of npm publication or a deployed Host.
 
 This maintainer guide is not part of the published package. The package README is the integrator guide shown on npm: keep maintainer, publication and repository-only instructions out of it, and do not link the private repository from it. Its TypeScript examples are compiled by `packages/sdk/test/readme.test.mjs`.
 
