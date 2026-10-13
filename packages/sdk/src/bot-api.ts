@@ -1,6 +1,13 @@
 import { record, integer } from "./parse.ts";
 import type { Fetch, BotApi, BotApiOutcome, TelegramUserProfile } from "./types.ts";
 
+// Telegram: the group creator holds every administrator right, an administrator holds the rights its flags grant,
+// and any other member holds none of them (a restricted member's can_* fields are member permissions, not admin rights).
+export function groupRights(member: { status?: unknown; can_manage_topics?: unknown; can_pin_messages?: unknown }): { canManageTopics: boolean; canPinMessages: boolean } {
+  const right = (flag: unknown) => member.status === "creator" || member.status === "administrator" && flag === true;
+  return { canManageTopics: right(member.can_manage_topics), canPinMessages: right(member.can_pin_messages) };
+}
+
 export function fetchBotApi(input: { token: string; fetch?: Fetch }): BotApi {
   const fetcher = input.fetch ?? ((request: Request) => fetch(request));
   const request = async (method: string, params: unknown): Promise<{ ok: true; result: unknown } | Extract<BotApiOutcome, { ok: false }>> => {
@@ -50,7 +57,7 @@ export function fetchBotApi(input: { token: string; fetch?: Fetch }): BotApi {
       const chat = chatResponse.ok ? record(chatResponse.result) : null;
       const member = memberResponse.ok ? record(memberResponse.result) : null;
       if (!chat || !member || chat.id !== chatId) return { found: false };
-      return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: typeof member.status === "string" ? member.status : "unknown", canManageTopics: member.can_manage_topics === true || member.status === "creator" };
+      return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: typeof member.status === "string" ? member.status : "unknown", ...groupRights(member) };
     },
   };
 }

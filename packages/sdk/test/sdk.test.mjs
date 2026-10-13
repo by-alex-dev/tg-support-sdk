@@ -77,7 +77,7 @@ async function correspondenceHost(configuration = config, userId = 123456789) {
     if (method === "events") { configured = params.events[0]; return new Response(null, { status: 202 }); }
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
     if (method === "getChat") return Response.json({ ok: true, result: { id: configuration.supportGroupId, type: "supergroup", is_forum: true } });
-    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: true } });
     calls.push({ method, params });
     if (failure) { const description = failure; failure = null; return Response.json({ ok: false, error_code: 400, description }); }
     const result = method === "createForumTopic" ? { message_thread_id: nextThread++ }
@@ -518,7 +518,7 @@ test("command authorization prevents another user's ciphertext reaching Telegram
     if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, username: "test_bot", is_bot: true } });
     if (method === "getChat" && body.chat_id === config.supportGroupId) return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
-    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: true } });
     requests.push({ path, body });
     if (method === "getChat") return profileFailure
       ? Response.json({ ok: false, error_code: 403, description: "Forbidden: profile unavailable" })
@@ -818,7 +818,7 @@ test("explicit configuration and execution preserve profile topic tags and the p
     if (method === "events") { configured = body.events[0]; return new Response(null, { status: 202 }); }
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
     if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
-    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: true } });
     seen.push({ method, body });
     return Response.json({ ok: true, result: method === "createForumTopic" ? { message_thread_id: 55 } : { message_id: 77 } });
   } };
@@ -880,7 +880,7 @@ test("a notice reply copies the operator message to its user and topic while pre
     botCalls.push({ method, body });
     if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
     if (method === "getChat") return Response.json({ ok: true, result: { id: body.chat_id, type: "supergroup", is_forum: true } });
-    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: true } });
     seen.push({ method, body });
     if (method === "createForumTopic") return Response.json({ ok: true, result: { message_thread_id: threadId++ } });
     if (method === "sendMessage") { const message_id = noticeId; noticeId += 10; return Response.json({ ok: true, result: { message_id } }); }
@@ -1152,4 +1152,20 @@ test("missing host translations use the default language and missing host templa
     { chat_id: 123456789, text: "✏️ Пользователь изменил сообщение." },
     { chat_id: 123456789, text: "Если нужна помощь — просто напишите в этот чат, мы передадим сообщение в поддержку." },
   ]);
+});
+
+test("configure refuses a support group where the bot may manage topics but not pin messages and sends nothing to the Service", async () => {
+  const requested = [], logs = [];
+  const options = { logger: { warn: entry => logs.push(entry) }, fetch: async request => {
+    const method = new URL(request.url).pathname.split("/").at(-1);
+    requested.push(method);
+    if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, username: "test_bot", is_bot: true } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: false } });
+    return new Response(null, { status: 202 });
+  } };
+  await assert.rejects(configure(config, options), error => error.name === "StartupError" &&
+    error.problems.join() === "bot_cannot_pin_messages" && /Grant the bot the Pin Messages permission/.test(error.message));
+  assert.deepEqual(requested.sort(), ["getChat", "getChatMember", "getMe"], "configuration must not reach the Service");
+  assert.deepEqual(logs, [{ kind: "configuration_rejected", reason: "bot_cannot_pin_messages" }]);
 });

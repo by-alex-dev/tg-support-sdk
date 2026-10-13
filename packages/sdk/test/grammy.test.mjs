@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Bot } from "grammy";
 import { createHmac } from "node:crypto";
 import { createGrammyTgSupport } from "tg-support-sdk/grammy";
-import { StartupError, NotStartedError } from "tg-support-sdk";
+import { StartupError, NotStartedError, configure } from "tg-support-sdk";
 
 const now = 1700000000000;
 const key = Buffer.alloc(32);
@@ -31,7 +31,7 @@ test("real grammY middleware, startup and both command transports execute a comp
         : method === "getChat" ? payload.chat_id === config.supportGroupId
           ? { id: config.supportGroupId, type: "supergroup", is_forum: true }
           : { id: payload.chat_id, type: "private", first_name: "Current profile" }
-        : method === "getChatMember" ? { status: "administrator", can_manage_topics: true }
+        : method === "getChatMember" ? { status: "administrator", can_manage_topics: true, can_pin_messages: true }
         : method === "createForumTopic" ? { message_thread_id: 55 }
         : { message_id: method === "copyMessage" ? 700 : 701 };
       return { ok: true, result };
@@ -111,4 +111,47 @@ test("grammY startup reports all group problems before sending configuration", a
     ["support_group_not_forum", "bot_not_administrator", "bot_cannot_manage_topics"].every(reason => error.problems.includes(reason)) &&
     /Enable Topics/.test(error.message) && /administrator/.test(error.message) && /Manage Topics/.test(error.message));
   assert.deepEqual(sent, []);
+});
+
+test("grammY startup refuses a support group where the bot may manage topics but not pin messages", async () => {
+  const bot = new Bot("12345:test-token"), sent = [], logs = [];
+  bot.api.config.use(async (_previous, method) => ({ ok: true, result: method === "getMe"
+    ? { id: 12345, is_bot: true, username: "demo", first_name: "Demo" }
+    : method === "getChat" ? { id: config.supportGroupId, type: "supergroup", is_forum: true }
+    : { status: "administrator", can_manage_topics: true, can_pin_messages: false } }));
+  const tgSupport = createGrammyTgSupport(bot, config, { logger: { warn: entry => logs.push(entry) },
+    fetch: async request => { sent.push(request); return new Response(null, { status: 202 }); } });
+  await assert.rejects(tgSupport.start(), error => error instanceof StartupError &&
+    error.problems.join() === "bot_cannot_pin_messages" && /Grant the bot the Pin Messages permission/.test(error.message));
+  assert.deepEqual(sent, [], "configuration must not reach the Service");
+  assert.deepEqual(logs, [{ kind: "configuration_rejected", reason: "bot_cannot_pin_messages" }]);
+  assert.equal((await tgSupport.receivePush(new Request(config.transport.hostUrl))).response.status, 503, "a refused host must not accept commands as healthy");
+  await assert.rejects(tgSupport.normalize(privateUpdate), NotStartedError);
+});
+
+test("configure and grammY startup read the bot's group rights the same way: the creator has all, an administrator has its flags, others have none", async () => {
+  const group = { id: config.supportGroupId, type: "supergroup", is_forum: true };
+  const cases = [
+    [{ status: "creator" }, []],
+    [{ status: "administrator", can_manage_topics: true, can_pin_messages: true }, []],
+    [{ status: "administrator", can_manage_topics: true, can_pin_messages: false }, ["bot_cannot_pin_messages"]],
+    [{ status: "restricted", can_manage_topics: true, can_pin_messages: true }, ["bot_not_administrator", "bot_cannot_manage_topics", "bot_cannot_pin_messages"]],
+    [{ status: "member" }, ["bot_not_administrator", "bot_cannot_manage_topics", "bot_cannot_pin_messages"]],
+  ];
+  const problems = async run => { try { await run(); return []; } catch (error) { assert.ok(error instanceof StartupError, String(error)); return error.problems; } };
+  for (const [member, expected] of cases) {
+    const viaFetch = await problems(() => configure({ ...config, botToken: "12345:test-token" }, { fetch: async request => {
+      const method = new URL(request.url).pathname.split("/").at(-1);
+      if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, is_bot: true, username: "demo" } });
+      if (method === "getChat") return Response.json({ ok: true, result: group });
+      if (method === "getChatMember") return Response.json({ ok: true, result: member });
+      return new Response(null, { status: 202 });
+    } }));
+    const bot = new Bot("12345:test-token");
+    bot.api.config.use(async (_previous, method) => ({ ok: true, result: method === "getMe"
+      ? { id: 12345, is_bot: true, username: "demo", first_name: "Demo" } : method === "getChat" ? group : member }));
+    const viaGrammy = await problems(() => createGrammyTgSupport(bot, config, { fetch: async () => new Response(null, { status: 202 }) }).start());
+    assert.deepEqual(viaFetch, expected, `configure with ${JSON.stringify(member)}`);
+    assert.deepEqual(viaGrammy, expected, `grammY start() with ${JSON.stringify(member)}`);
+  }
 });
