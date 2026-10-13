@@ -57,7 +57,8 @@ export type TelegramParams = {
   setMessageReaction: MessageTarget & { reaction: readonly Record<string, Json>[] };
   pinChatMessage: MessageTarget & { disable_notification?: boolean };
 };
-export type GroupFacts = { found: false } | { found: true; isForum: boolean; botStatus: string; canManageTopics: boolean; canPinMessages: boolean };
+/** `canPinMessages` is optional for BotApi adapters written before 1.2.0: when it is not reported, startup does not check it. */
+export type GroupFacts = { found: false } | { found: true; isForum: boolean; botStatus: string; canManageTopics: boolean; canPinMessages?: boolean };
 export interface BotApi {
   call(request: TelegramRequest): Promise<BotApiOutcome>;
   getProfile(request: { method: "getChat"; chatId: number }): Promise<{ ok: true; profile: TelegramUserProfile } | Extract<BotApiOutcome, { ok: false }>>;

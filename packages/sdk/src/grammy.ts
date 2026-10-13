@@ -2,6 +2,7 @@ import { GrammyError, type Api, type Bot, type Context, type MiddlewareFn } from
 import { createTgSupport } from "./index.ts";
 import { validateConfig, telegramBotId } from "./config.ts";
 import { registerBot } from "./startup.ts";
+import { groupRights } from "./bot-api.ts";
 import { NotStartedError, ServiceError } from "./errors.ts";
 import { record, integer } from "./parse.ts";
 import type { BotApi, BotApiOutcome, TgSupport, TgSupportConfig, TgSupportEvent, TgSupportOptions } from "./types.ts";
@@ -37,9 +38,7 @@ export function grammyBotApi(api: Api): BotApi {
       try {
         const chat = await api.getChat(chatId), member = await api.getChatMember(chatId, botId);
         if (chat.id !== chatId) return { found: false };
-        return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: member.status,
-          canManageTopics: member.status === "creator" || member.status === "administrator" && member.can_manage_topics === true,
-          canPinMessages: member.status === "creator" || member.status === "administrator" && member.can_pin_messages === true };
+        return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: member.status, ...groupRights(member) };
       } catch { return { found: false }; }
     },
   };

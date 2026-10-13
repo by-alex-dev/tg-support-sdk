@@ -277,7 +277,7 @@ Use `transport: { kind: "push", hostUrl: env("TG_SUPPORT_HOST_URL") }`, call `aw
 
 ### 7. Check the connection
 
-From a Telegram account that is not in the support group, send a message to your bot. A topic named after that user appears in the support group with a pinned header. Reply in that topic from an operator account: the user receives the reply, and the operator's message gets a 👀 reaction once delivered.
+From a Telegram account that is not in the support group, send a message to your bot. A topic named after that user appears in the support group, with the Topic header pinned at its top. Reply in that topic from an operator account: the user receives the reply, and the operator's message gets a 👀 reaction once delivered.
 
 ## Errors
 
@@ -398,7 +398,7 @@ The grammY middleware sends each event and awaits `next()`; a failed send throws
 
 ### Other Telegram clients and lower-level calls
 
-For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter; `getChatMember` must report `canManageTopics` and `canPinMessages`. All constructors accept options: a `fetch(Request)` function, a millisecond `clock.now()`, a `logger` for diagnostic codes and an optional `resolveProfile(userId)`.
+For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter. Its `inspectGroup` reports the support group from Telegram `getChat` and `getChatMember`: `canManageTopics` is required, `canPinMessages` is optional and is not checked when omitted. All constructors accept options: a `fetch(Request)` function, a millisecond `clock.now()`, a `logger` for diagnostic codes and an optional `resolveProfile(userId)`.
 
 The lower-level interface exposes `normalize`, `hostNotice`, `userForget`, `send`, `receivePush`, `execute`, `claim` and `heartbeat`. A host without grammY polls with `claim()`, then `execute(command)` and `send([result])` for each command, in its own loop with its own retries. Claim responses require a valid Service signature. Push and pull use the same command authorization, sealed data and result events.
 
@@ -406,7 +406,7 @@ For Node TypeScript hosts that check dependency declarations (`skipLibCheck: fal
 
 ### Templates
 
-`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link.
+`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and Topic header link.
 
 Language selection uses an exact match, then the base language, then `fallback`. If an override lacks that translation but has a fallback-language translation, the fallback callback receives the fallback language. A template without an override keeps its SDK text. Unknown or wrong-slot template IDs are rejected before Telegram is called.
 
