@@ -8,7 +8,7 @@
 - Template render callbacks receive `reactions` (`null` for templates other than `user_reacted`). Built-in texts: «Пользователь отреагировал: …» and "The user reacted: …".
 - `bot_configured.sdk_version` becomes `tg-support-sdk/1.1.0`. Protocol v1, Host keys and configuration remain compatible with 1.0.
 
-## 1.0.1 — published 2026-10-13
+## 1.0.1 — published 2026-10-12
 
 - Fix Service requests and native Bot API calls on Cloudflare Workers, where `Request` rejects `redirect: "error"` before fetching. Both clients use `redirect: "manual"` and reject every 3xx response without following its Location or forwarding credentials. A successful-looking Bot API body on a redirect is also rejected.
 - Add a regression through the built public SDK in workerd, checking successful outbound requests and rejection of HTTP 301, 302, 303, 307 and 308 for both clients.

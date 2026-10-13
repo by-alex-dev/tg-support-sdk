@@ -1,6 +1,6 @@
 # Preparing and publishing tg-support-sdk 1.1.0
 
-1.0.1 was published on 2026-10-13. The package remains the public, unscoped `tg-support-sdk`; the repository name is `tg-support`. Publication requires owner authorization for the reviewed release. A local artifact is not evidence of npm publication or a deployed Host.
+1.0.1 was published on 2026-10-12. The package remains the public, unscoped `tg-support-sdk`; the repository name is `tg-support`. Publication requires owner authorization for the reviewed release. A local artifact is not evidence of npm publication or a deployed Host.
 
 Use a reviewed, clean commit and Node 24. From the repository root:
 
