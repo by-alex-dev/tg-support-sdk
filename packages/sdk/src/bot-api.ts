@@ -50,7 +50,7 @@ export function fetchBotApi(input: { token: string; fetch?: Fetch }): BotApi {
       const chat = chatResponse.ok ? record(chatResponse.result) : null;
       const member = memberResponse.ok ? record(memberResponse.result) : null;
       if (!chat || !member || chat.id !== chatId) return { found: false };
-      return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: typeof member.status === "string" ? member.status : "unknown", canManageTopics: member.can_manage_topics === true || member.status === "creator" };
+      return { found: true, isForum: chat.type === "supergroup" && chat.is_forum === true, botStatus: typeof member.status === "string" ? member.status : "unknown", canManageTopics: member.can_manage_topics === true || member.status === "creator", canPinMessages: member.can_pin_messages === true || member.status === "creator" };
     },
   };
 }

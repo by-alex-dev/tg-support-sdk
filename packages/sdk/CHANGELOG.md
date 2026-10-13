@@ -1,6 +1,12 @@
 # Changelog
 
-## 1.1.0 — 2026-10-13
+## 1.2.0 — unreleased
+
+- `configure` and grammY `start()` also check that the Bot may pin messages in the support group. An administrator without Pin Messages fails with the new startup problem `bot_cannot_pin_messages` ("Grant the bot the Pin Messages permission."); `bot_configured` is not sent and the grammY host does not start (the command endpoint keeps answering 503). Previously such a Bot registered successfully and then could not unpin and pin topic headers. The group creator passes, as for Manage Topics.
+- `GroupFacts` gains a required `canPinMessages` field. Custom `BotApi` implementations passed to `createTgSupport` must report it from `getChatMember` (`can_pin_messages`); omitting it is reported as `bot_cannot_pin_messages`.
+- `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.0`. Protocol v1, Host keys and configuration remain compatible with 1.1.
+
+## 1.1.0 — published 2026-10-13
 
 - A User reaction to a copy of an Operator reply is shown in the topic as a short `user_reacted` notice replying to the Operator message, instead of replacing the 👀 delivery mark (a Bot can hold only one reaction per message). The Service sends the notice with `sendMessage`, changes it with `editMessageText` and removes it with `deleteMessage`.
 - `user_reaction` events report `cleared: true` when the new list is empty. The Service uses the notice only for Hosts that report `cleared`; older Hosts keep the mirrored reaction.

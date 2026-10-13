@@ -22,6 +22,7 @@ export class StartupError extends Error {
       support_group_not_forum: "Enable Topics in the support supergroup.",
       bot_not_administrator: "Promote the bot to an administrator of the support group.",
       bot_cannot_manage_topics: "Grant the bot the Manage Topics permission.",
+      bot_cannot_pin_messages: "Grant the bot the Pin Messages permission.",
       telegram_bot_mismatch: "Use the bot token that belongs to this host configuration.",
       bot_identity_unavailable: "Check the bot token and Telegram connectivity.",
       bot_mismatch: "Use the signing secret issued for this Telegram bot.",
