@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — unreleased
+## 1.2.0 — 2026-10-13
 
 - `configure` and grammY `start()` also check that the Bot may pin messages in the support group. An administrator without Pin Messages fails with the new startup problem `bot_cannot_pin_messages` ("Grant the bot the Pin Messages permission."); `bot_configured` is not sent and the grammY host does not start (the command endpoint keeps answering 503). Previously such a Bot registered successfully and then could not unpin and pin topic headers. The group creator passes, as for Manage Topics.
 - `GroupFacts` gains an optional `canPinMessages` field, reported by `fetchBotApi` and `grammyBotApi`. A custom `BotApi` may report it from `inspectGroup` (Telegram `getChatMember`, `can_pin_messages`); when it is omitted, the pin right is not checked, so existing adapters keep compiling and working.
