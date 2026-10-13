@@ -1,88 +1,102 @@
 # tg-support-sdk
 
-This is SDK 1.2.0 (unreleased). It keeps the 1.0 public API, adds the `user_reacted` topic notice (1.1.0) and checks the Pin Messages permission at startup (1.2.0); [CHANGELOG.md](CHANGELOG.md) lists the release changes. The Service wire minimum remains 0.4.0. Publication and Host adoption follow [RELEASE.md](RELEASE.md).
+Connect your Telegram bot to tg-support: every user who writes to your bot gets a topic in your support forum group, and operators answer right in that topic. The bot token, Telegram message text and your encryption keys stay in your bot's host; the tg-support Service only sees sealed (encrypted) data and protocol events.
 
-> **Back up `token_key` outside the Host before connecting a Bot. It is the only key to that Bot's state: losing it loses every Topic and Message link. It cannot be rotated.**
+The main entry uses WebCrypto, `fetch`, `Request` and `Response` and has no runtime dependencies: it runs in Cloudflare Workers, Pages Functions and Node 24. The optional `tg-support-sdk/grammy` entry uses your own grammY installation. Release notes are in `CHANGELOG.md`, shipped in this package.
+
+> **Back up `TOKEN_KEY` outside the host before connecting a bot. It is the only key to that bot's state: losing it loses every user topic and message link. It cannot be rotated.**
 >
-> **Never delete old `seal_key` entries. Future replies, edits and reactions can need ciphertext sealed years earlier. Add a new current key; retain all old keys.**
+> **Never delete old `SEAL_KEYS` entries. Future replies, edits and reactions can need data sealed years earlier. Add a new current key; retain all old keys.**
 >
-> **The Host owns reliable Event delivery, retries and acceptance order. The SDK has no durable outbox or retry loop. `waitUntil` keeps the current attempt alive; it does not persist an Event.**
+> **Your host owns reliable event delivery, retries and ordering. The SDK has no durable outbox or retry loop. `waitUntil` keeps the current attempt alive; it does not persist an event.**
 
-To publish a release, run `bash scripts/prepare-sdk-publish.sh` from the monorepo root. The wizard uses your personal npm account, builds the package, runs its tests and shows the tarball before publication. An npm organization is optional.
+## Choose the host shape
 
-The SDK connects a Telegram bot host to tg-support. The main entry uses WebCrypto, fetch, Request and Response; it works in Workers, Pages Functions and Node 24. Creating an SDK instance performs no network requests. The main entry bundles its protocol validation and has no runtime dependencies. The optional `tg-support-sdk/grammy` entry uses the host's grammY installation.
+| Host | Adapter | How tg-support reaches the host | Register the configuration with |
+| --- | --- | --- | --- |
+| Serverless with a public HTTPS URL (Cloudflare Workers or Pages Functions, any `fetch`-style runtime) | `createWebTgSupport` from `tg-support-sdk` | push: the Service POSTs signed commands to your endpoint | `npx tg-support-sdk configure` in your deploy pipeline, after every deploy |
+| Long-lived Node process with grammY and a public HTTPS URL | `createGrammyTgSupport` from `tg-support-sdk/grammy` | push | `await tgSupport.start()` at process start; no `configure` step |
+| Long-lived Node process with grammY and no public URL (local development) | `createGrammyTgSupport` | pull: your process claims commands with `poll()` | `await tgSupport.start()`; no `configure` step |
 
-Start with a separate Telegram Bot token held only by your Host. Open the tg-support Service bot, send `/start`, accept the published `/terms`, then obtain legitimate paid access or redeem a prepared Invite with `/invite <code>`. Create a Bot using `/newbot <name>` and save the one-time signing secret as `TG_SUPPORT_SECRET` before its message disappears after ten minutes. Account access and plan limits are enforced by the deployed Service; this guide does not grant them. Never send the Telegram Bot token or Host keys to the Service bot.
+"Registering the configuration" checks your bot and support group in Telegram, then sends the `bot_configured` event to the Service. The Service delivers nothing to a bot before that succeeds.
 
-Install `npm install --save-exact tg-support-sdk@1.2.0`. Generate Host keys locally with `npx tg-support-sdk keys`, back up `TOKEN_KEY` now, and save `TOKEN_KEY` and `SEAL_KEYS` only in your Host's secrets. Enable Topics in the support supergroup and make your Telegram Bot an administrator with Manage Topics and Pin Messages. Set `SUPPORT_GROUP_ID`, the Service `/v1` URL, the exact public command URL and one increasing deployment revision. Authenticate Telegram webhook requests in your Host before handing updates to the SDK.
+## Connect a bot step by step
 
-```ts
-import { createWebTgSupport, parseKeys } from "tg-support-sdk";
+### 1. Create the Telegram bot
 
-const tgSupport = createWebTgSupport({
-  botToken: env.BOT_TOKEN,
-  service: { url: env.TG_SUPPORT_SERVICE_URL, botSecret: env.TG_SUPPORT_SECRET },
-  keys: parseKeys({ tokenKey: env.TOKEN_KEY, sealKeys: env.SEAL_KEYS }),
-  supportGroupId: Number(env.SUPPORT_GROUP_ID),
-  features: { notificationsTopic: false, welcomeHint: false },
-  transport: { kind: "push", hostUrl: env.TG_SUPPORT_HOST_URL },
-  configRevision: BUILD_REVISION,
-});
+Create a bot with [@BotFather](https://t.me/BotFather) and keep its token as `BOT_TOKEN` in your host's secrets. Use a bot that only your host controls. For local development with pull, use a separate test bot without a Telegram webhook.
+
+### 2. Register the bot in the Service bot
+
+Everything about your tg-support account happens in the Service bot in Telegram. The currently deployed Service (stand) is:
+
+- Service bot: [@relay_group_bot](https://t.me/relay_group_bot)
+- Service URL: `https://tg-support.by-alex.dev/v1` — set it as `TG_SUPPORT_SERVICE_URL` (it includes `/v1`)
+
+In the Service bot:
+
+1. Send `/start` and accept the terms (`/terms` shows them again).
+2. Get access: pay for a plan (`/plan`) or redeem an invite code with `/invite <code>`.
+3. Send `/newbot <name>`. The reply contains the signing secret `tgs1.<UUID>.<key>`. Save it as `TG_SUPPORT_SECRET` right away: the Service bot deletes that message after ten minutes. If you lose it, `/rotate <bot_id>` issues a new one (`/bots` lists your bots and their IDs). The UUID in the secret is the Service's bot ID; it differs from the numeric Telegram bot ID in `BOT_TOKEN`.
+
+Never send the Telegram bot token or your host keys to the Service bot. `/help` lists all Service bot commands.
+
+### 3. Install the SDK and generate host keys
+
+```sh
+npm install --save-exact tg-support-sdk
+npx tg-support-sdk keys
 ```
 
-`TG_SUPPORT_SERVICE_URL` includes `/v1`. `TG_SUPPORT_SECRET` has the form `tgs1.<Service UUID>.<base64url secret>`. Its UUID differs from the decimal Telegram bot ID in `BOT_TOKEN`. `TG_SUPPORT_HOST_URL` is the exact public command endpoint, including any path and query string. Request signatures use that configured URL even when a proxy rewrites the incoming URL.
+`keys` prints `TOKEN_KEY=…` and `SEAL_KEYS=…`. Back up `TOKEN_KEY` outside the host now, then store both only in your host's secrets. The keys never leave your host; the Service never sees them.
 
-After the host handles its own commands and payment updates, pass the remaining Telegram update to `await tgSupport.handleUpdate(update, { waitUntil: promise => context.waitUntil(promise) })`. Private user messages and supported forum updates become encrypted tg-support events. Unrelated or unsupported updates are ignored. Without `waitUntil`, event sending is awaited.
+### 4. Prepare the support group
 
-Choose delivery durability in the host. Immediate delivery waits for the Service:
+1. Create a Telegram group for support and enable **Topics** in its settings. Telegram turns the group into a forum supergroup.
+2. Add your bot to the group and promote it to administrator with at least **Manage Topics** and **Pin Messages**. The bot creates a topic per user and pins a topic header with the user's profile in it.
+3. Add your operators as members of the group. They need no admin rights. Every member's message in a user's topic is delivered to that user, so invite only people who answer users.
+4. Find the group ID: a negative number starting with `-100`. Read it after enabling Topics, because enabling Topics can change the ID. Either open the group in [Telegram Web](https://web.telegram.org/a/) and copy the number after `#` in the address bar, or, while the bot has no webhook, send any message in the group and open `https://api.telegram.org/bot<BOT_TOKEN>/getUpdates`: the ID is `message.chat.id`. Save it as `SUPPORT_GROUP_ID`.
 
-```ts
-const event = await tgSupport.normalize(update);
-if (event) {
-  const result = await tgSupport.send([event]);
-  // Handle retryable or fatal before acknowledging this update.
-}
-```
+Two optional features in the configuration:
 
-Background delivery lets the Bot answer while Service is slow. Configure the SDK logger to record its diagnostic codes without update bodies:
+- `features.notificationsTopic`: the bot creates a shared "Notifications" topic with a notice for every new user. An operator's reply to that notice goes to that user; other messages in the topic stay in the group, so operators can talk there.
+- `features.welcomeHint`: the bot sends and pins a short hint in each new user's private chat saying that the chat is connected to support.
 
-```ts
-const tgSupport = createWebTgSupport(config, {
-  logger: { warn: event => console.warn(event) },
-});
-await tgSupport.handleUpdate(update, { waitUntil: work => context.waitUntil(work) });
-return new Response("OK");
-```
+### 5. Collect the host settings
 
-`waitUntil` keeps that attempt alive; it does not persist or retry a failed event. Without a host retry policy, an event can be lost during an outage. For durable delivery, save the normalized event in the host's outbox before acknowledging Telegram, then reuse that exact event and `eventId` on retries. The following uses host-owned storage methods:
+| Variable | Value | Needed by |
+| --- | --- | --- |
+| `BOT_TOKEN` | Telegram bot token from @BotFather | all hosts |
+| `TG_SUPPORT_SERVICE_URL` | Service URL including `/v1` (step 2) | all hosts |
+| `TG_SUPPORT_SECRET` | signing secret `tgs1.<UUID>.<key>` from `/newbot` | all hosts |
+| `TOKEN_KEY`, `SEAL_KEYS` | output of `npx tg-support-sdk keys` | all hosts |
+| `SUPPORT_GROUP_ID` | support group ID, `-100…` | all hosts |
+| `TG_SUPPORT_CONFIG_REVISION` | a non-negative integer you increase whenever the group, features, transport, host URL or attempt deadline change, for example the CI run number or the build time in seconds | all hosts |
+| `TG_SUPPORT_HOST_URL` | exact public HTTPS URL of your tg-support command endpoint, including any path and query | push hosts |
+| `TELEGRAM_WEBHOOK_SECRET` | random string for Telegram's `secret_token`, for example `openssl rand -hex 32` | webhook hosts |
 
-```ts
-const event = await tgSupport.normalize(update);
-if (event) await outbox.put(event.eventId, event);
-return new Response("OK");
+Registering the same revision again with the same configuration is accepted without changes, so rerunning `configure` or restarting a host is safe. The same revision with a different configuration fails with `config_conflict`.
 
-// A separate host worker preserves acceptance order within each user scope.
-for await (const entry of outbox.ready()) {
-  const result = await tgSupport.send([entry.event]);
-  if (result.kind === "accepted") await outbox.remove(entry.id);
-  else if (result.kind === "retryable") await outbox.defer(entry.id, result.retryAfterMs);
-  else await outbox.block(entry.id, result.reason);
-}
-```
+### 6a. Serverless push host: Cloudflare Pages Functions
 
-At the tg-support command endpoint, return `await tgSupport.handleCommandRequest(request, { waitUntil: promise => context.waitUntil(promise) })`. It accepts signed POST challenges and command batches. Command acceptance returns HTTP 202; Telegram execution and result delivery run through `waitUntil`, in batch order. Keep the host's command endpoint available for this background work.
-
-For Cloudflare Pages Functions, share a configuration factory in `support.ts`:
+Share a configuration factory between the functions:
 
 ```ts
+// support.ts
 import { createWebTgSupport, parseKeys } from "tg-support-sdk";
 
 export interface Env {
-  BOT_TOKEN: string; TELEGRAM_WEBHOOK_SECRET: string;
-  TG_SUPPORT_SERVICE_URL: string; TG_SUPPORT_SECRET: string;
-  TOKEN_KEY: string; SEAL_KEYS: string; SUPPORT_GROUP_ID: string;
-  TG_SUPPORT_HOST_URL: string; BUILD_REVISION: string;
+  BOT_TOKEN: string;
+  TELEGRAM_WEBHOOK_SECRET: string;
+  TG_SUPPORT_SERVICE_URL: string;
+  TG_SUPPORT_SECRET: string;
+  TOKEN_KEY: string;
+  SEAL_KEYS: string;
+  SUPPORT_GROUP_ID: string;
+  TG_SUPPORT_HOST_URL: string;
+  TG_SUPPORT_CONFIG_REVISION: string;
 }
+
 export function support(env: Env) {
   return createWebTgSupport({
     botToken: env.BOT_TOKEN,
@@ -91,115 +105,329 @@ export function support(env: Env) {
     supportGroupId: Number(env.SUPPORT_GROUP_ID),
     features: { notificationsTopic: false, welcomeHint: false },
     transport: { kind: "push", hostUrl: env.TG_SUPPORT_HOST_URL },
-    configRevision: Number(env.BUILD_REVISION),
+    configRevision: Number(env.TG_SUPPORT_CONFIG_REVISION),
   });
 }
 ```
 
-`functions/telegram.ts` authenticates Telegram's configured webhook secret before normalizing the update:
+`functions/telegram.ts` is the Telegram webhook. It authenticates Telegram's webhook secret, then hands the update to the SDK. Route your own commands and payment updates before this handoff; updates the SDK does not support are ignored.
 
 ```ts
-import type { PagesFunction } from "@cloudflare/workers-types";
+// functions/telegram.ts
 import { support, type Env } from "../support";
 
-export const onRequestPost: PagesFunction<Env> = async context => {
-  if (!context.env.TELEGRAM_WEBHOOK_SECRET ||
-      context.request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== context.env.TELEGRAM_WEBHOOK_SECRET) {
+// The fields of Cloudflare's EventContext used here; `PagesFunction<Env>` from @cloudflare/workers-types also fits.
+type Context = { request: Request; env: Env; waitUntil(promise: Promise<unknown>): void };
+
+export async function onRequestPost(context: Context): Promise<Response> {
+  const secret = context.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret || context.request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== secret) {
     return new Response("Unauthorized", { status: 401 });
   }
-  await support(context.env).handleUpdate(await context.request.json(), {
-    waitUntil: work => context.waitUntil(work),
-  });
+  const update: unknown = await context.request.json();
+  await support(context.env).handleUpdate(update, { waitUntil: work => context.waitUntil(work) });
   return new Response("OK");
-};
+}
 ```
 
-Route your own product commands and payment updates before this SDK handoff. Install `@cloudflare/workers-types` as a development dependency when using the shown Pages types. `functions/tg-support.ts` is the separate signed command endpoint; set `TG_SUPPORT_HOST_URL` to its exact public URL:
+`functions/tg-support.ts` is the signed command endpoint (push). Set `TG_SUPPORT_HOST_URL` to its exact public URL, for example `https://<project>.pages.dev/tg-support`. It answers 202 at once; Telegram calls and result delivery run in `waitUntil`, in batch order.
 
 ```ts
-import type { PagesFunction } from "@cloudflare/workers-types";
+// functions/tg-support.ts
 import { support, type Env } from "../support";
 
-export const onRequestPost: PagesFunction<Env> = context =>
-  support(context.env).handleCommandRequest(context.request, {
-    waitUntil: work => context.waitUntil(work),
-  });
+type Context = { request: Request; env: Env; waitUntil(promise: Promise<unknown>): void };
+
+export async function onRequestPost(context: Context): Promise<Response> {
+  return support(context.env).handleCommandRequest(context.request, { waitUntil: work => context.waitUntil(work) });
+}
 ```
 
-After deploying Pages, run the explicit `configure` step below with the same keys, URLs, group and `BUILD_REVISION`. Configure Telegram's webhook separately with the same `TELEGRAM_WEBHOOK_SECRET`; the SDK does not set it. Pages deployment bindings and the Node configuration module must describe the same Bot.
+The serverless runtime never registers its configuration. Do it in the deploy pipeline, after the functions are deployed, with a Node module whose default export is the same configuration plus `botToken`:
 
-For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter. Both constructors accept a `fetch(Request)` function, a millisecond `clock.now()`, a logger for structured diagnostic codes, and an optional `resolveProfile(userId)`. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link. The executor assembles only the closed method's named Telegram parameters.
+```ts
+// tg-support.config.ts
+import { parseKeys, type TgSupportConfig } from "tg-support-sdk";
 
-`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal.
+function env(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Set ${name}.`);
+  return value;
+}
+
+export default {
+  botToken: env("BOT_TOKEN"),
+  service: { url: env("TG_SUPPORT_SERVICE_URL"), botSecret: env("TG_SUPPORT_SECRET") },
+  keys: parseKeys({ tokenKey: env("TOKEN_KEY"), sealKeys: env("SEAL_KEYS") }),
+  supportGroupId: Number(env("SUPPORT_GROUP_ID")),
+  features: { notificationsTopic: false, welcomeHint: false },
+  transport: { kind: "push", hostUrl: env("TG_SUPPORT_HOST_URL") },
+  configRevision: Number(env("TG_SUPPORT_CONFIG_REVISION")),
+} satisfies TgSupportConfig & { botToken: string };
+```
+
+```sh
+npx tg-support-sdk configure --config ./tg-support.config.ts
+```
+
+Node 24 loads a `.ts` module directly; a `.mjs` module without the type annotation works the same. Keep the functions' environment and the `configure` environment describing the same bot, group, features, URL and revision. On success the command prints `tg-support configuration registered.`; on failure it prints every problem with advice and exits with status 1 (see [Errors](#errors)). After the first registration the Service confirms `TG_SUPPORT_HOST_URL` with a signed challenge to your command endpoint, so deploy the endpoint first.
+
+Finally, point Telegram's webhook at `functions/telegram.ts`; the SDK does not set it:
+
+```sh
+curl -sS "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
+  --data-urlencode "url=https://<project>.pages.dev/telegram" \
+  --data-urlencode "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+  --data-urlencode 'allowed_updates=["message","edited_message","message_reaction","callback_query"]'
+```
+
+Add the update types your own bot needs to `allowed_updates`. The SDK needs the four shown (also available as `tgSupport.allowedUpdates`).
+
+### 6b. Long-lived grammY host with pull (local development, no public URL)
+
+Install `grammy`. This host registers its configuration in `start()` and claims commands itself, so it needs no `configure` step and no public URL. The SDK creates no timers: the host runs the command loop, and this example retries transient failures with backoff instead of crashing.
+
+```ts
+// pull-host.ts
+import { setTimeout as sleep } from "node:timers/promises";
+import { Bot } from "grammy";
+import { parseKeys, ServiceError, StartupError, type TgSupportEvent } from "tg-support-sdk";
+import { createGrammyTgSupport } from "tg-support-sdk/grammy";
+
+function env(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Set ${name}.`);
+  return value;
+}
+const backoff = (failures: number) => Math.min(60_000, 1_000 * 2 ** failures);
+
+const bot = new Bot(env("BOT_TOKEN"));
+const tgSupport = createGrammyTgSupport(bot, {
+  service: { url: env("TG_SUPPORT_SERVICE_URL"), botSecret: env("TG_SUPPORT_SECRET") },
+  keys: parseKeys({ tokenKey: env("TOKEN_KEY"), sealKeys: env("SEAL_KEYS") }),
+  supportGroupId: Number(env("SUPPORT_GROUP_ID")),
+  features: { notificationsTopic: false, welcomeHint: false },
+  transport: { kind: "pull" },
+  configRevision: Number(env("TG_SUPPORT_CONFIG_REVISION")),
+});
+
+// Checks the bot and group, then registers. Telegram or Service outages are worth retrying; other problems need a fix.
+const transient = new Set(["bot_identity_unavailable", "network", "rate_limited", "server_error"]);
+for (let failures = 1; ; failures++) {
+  try {
+    await tgSupport.start();
+    break;
+  } catch (error) {
+    if (!(error instanceof StartupError) || !error.problems.every(problem => transient.has(problem)) || failures === 5) throw error;
+    console.warn(`tg-support startup failed (${error.problems.join(", ")}); retrying`);
+    await sleep(backoff(failures));
+  }
+}
+
+// Sends each user event, retrying transient Service failures before grammY moves on to the next update.
+async function deliver(events: TgSupportEvent[]): Promise<void> {
+  for (let failures = 1; ; failures++) {
+    const result = await tgSupport.send(events);
+    if (result.kind === "accepted") return;
+    if (result.kind === "fatal" || failures === 5) throw new ServiceError(result);
+    await sleep(result.retryAfterMs ?? backoff(failures));
+  }
+}
+bot.use(tgSupport.middleware(deliver));
+// Register your own handlers after this middleware.
+bot.catch(({ error }) => {
+  console.error("Update failed:", error instanceof ServiceError ? error.result.reason : error);
+});
+
+// Claims and executes commands until shutdown. poll() throws ServiceError on any claim or result failure.
+async function pollCommands(signal: AbortSignal): Promise<void> {
+  let failures = 0;
+  while (!signal.aborted) {
+    try {
+      await tgSupport.poll();
+      failures = 0;
+      await sleep(1_000, undefined, { signal });
+    } catch (error) {
+      if (signal.aborted) return;
+      if (!(error instanceof ServiceError)) throw error;
+      failures++;
+      const { result } = error;
+      const delay = result.kind === "retryable" ? result.retryAfterMs ?? backoff(failures) : 60_000;
+      console.warn(`tg-support poll failed (${result.reason}); retrying in ${delay} ms`);
+      await sleep(delay, undefined, { signal }).catch(() => {});
+    }
+  }
+}
+
+const shutdown = new AbortController();
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => { shutdown.abort(); void bot.stop(); });
+}
+await Promise.all([
+  bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] }),
+  pollCommands(shutdown.signal),
+]);
+```
+
+Run it with `node pull-host.ts` and the variables from step 5. A fatal `poll()` failure such as `bot_inactive` or `account_blocked` keeps the loop alive at a slow pace, so the host resumes once the account is fixed in the Service bot.
+
+### 6c. Long-lived grammY host with push
+
+Use `transport: { kind: "push", hostUrl: env("TG_SUPPORT_HOST_URL") }`, call `await tgSupport.start()` and `bot.use(tgSupport.middleware(…))` as in 6b, and serve `tgSupport.handleCommandRequest(request, { waitUntil })` at `TG_SUPPORT_HOST_URL` with the same `Request` and `Response` interface as the Web adapter. Before `start()` completes, the command endpoint answers 503. Do not run `poll()` for push.
+
+### 7. Check the connection
+
+From a Telegram account that is not in the support group, send a message to your bot. A topic named after that user appears in the support group with a pinned header. Reply in that topic from an operator account: the user receives the reply, and the operator's message gets a 👀 reaction once delivered.
+
+## Errors
+
+### `ConfigError`: invalid configuration
+
+`createWebTgSupport`, `createGrammyTgSupport`, `createTgSupport`, `configure` and `parseKeys` throw `ConfigError` before any network request:
+
+| Message | Fix |
+| --- | --- |
+| `Service and push URLs must use HTTPS without credentials or fragments.` | Check `TG_SUPPORT_SERVICE_URL` and `TG_SUPPORT_HOST_URL`. |
+| `supportGroupId must identify a supergroup.` | Use the negative `-100…` ID; `Number(…)` of a missing variable is `NaN`. |
+| `previousSupportGroupIds must identify supergroups.` | List only former `-100…` group IDs. |
+| `configRevision must be a nonnegative integer.` | Set `TG_SUPPORT_CONFIG_REVISION` to an integer. |
+| `Attempt deadline must be between 30 and 600 seconds.` | Fix `attemptDeadlineSeconds` or omit it (60). |
+| `Invalid host keyring.`, `TOKEN_KEY must contain 32 bytes.`, `Invalid SEAL_KEYS keyring.` and other key or base64url messages | Use the unchanged output of `npx tg-support-sdk keys`. |
+| `Invalid signing secret format.`, `Signing secret must contain 32 bytes.` | Copy the full `tgs1.<UUID>.<key>` secret from the Service bot. |
+| `Invalid Telegram bot token.` | Copy the token from @BotFather. |
+| `Template fallback must belong to the configured languages.` | Add `templates.fallback` to `templates.languages`. |
+
+The `configure` CLI prints `Configuration failed. Check the config module and host secrets.` for a configuration module that cannot be loaded or a `ConfigError`; check the variables above.
+
+### `StartupError`: `configure` and `start()` problems
+
+`configure` and grammY `start()` throw `StartupError`. Its `problems` lists every code found, and its message adds advice for each. Telegram checks run first; when any fails, nothing is sent to the Service. Then the Service answers `bot_configured`.
+
+| Code | Meaning | Action |
+| --- | --- | --- |
+| `bot_identity_unavailable` | Telegram `getMe` failed: wrong or revoked `BOT_TOKEN`, or Telegram unreachable. A freshly created bot can fail briefly. | Check the token with @BotFather; retry in a minute. |
+| `telegram_bot_mismatch` | `getMe` returned a different bot than `BOT_TOKEN` names. | Use the bot token that belongs to this configuration. |
+| `support_group_unavailable` | The bot cannot read the group: wrong `SUPPORT_GROUP_ID`, the bot is not a member, or the ID changed when Topics were enabled. | Add the bot to the group and copy the current `-100…` ID. |
+| `support_group_not_forum` | The group has no Topics. | Enable Topics, then recheck the group ID. |
+| `bot_not_administrator` | The bot is a regular member. | Promote the bot to administrator. |
+| `bot_cannot_manage_topics` | The administrator lacks Manage Topics. | Grant Manage Topics. |
+| `bot_cannot_pin_messages` | The administrator lacks Pin Messages; the bot could not pin topic headers. | Grant Pin Messages. |
+| `network`, `server_error`, `rate_limited` | The Service was unreachable, failed or asked to slow down. | Check that `TG_SUPPORT_SERVICE_URL` is the HTTPS Service URL with `/v1`; retry later. |
+| `unknown_bot` | The Service does not know the bot in `TG_SUPPORT_SECRET`: it was deleted, or the secret belongs to another Service. | Use a secret from this Service's `/newbot` or `/rotate`. |
+| `bad_signature` | `TG_SUPPORT_SECRET` is wrong or was replaced by `/rotate` more than 24 hours ago. | Use the current secret; `/rotate <bot_id>` issues a new one. |
+| `stale_timestamp` | The host clock is more than five minutes off. | Synchronize the host clock. |
+| `bot_mismatch` | This Service bot is already bound to another Telegram bot. | Use the secret issued for this Telegram bot, or `/newbot` for a new one. |
+| `config_conflict` | The same `configRevision` was registered with a different configuration. | Increase `TG_SUPPORT_CONFIG_REVISION`. |
+| `sdk_too_old` | The Service requires a newer SDK. | Upgrade `tg-support-sdk`. |
+| `invalid_host_url` | The Service rejected `TG_SUPPORT_HOST_URL`. | Use a public HTTPS URL without credentials or a fragment that does not resolve to a private address. |
+| `account_blocked` | The Service admin blocked the account. | Contact the Service admin. |
+| `bot_inactive` | The account has no active access, or this bot is over the plan's bot limit. | Check `/plan`; upgrade or delete another bot with `/deletebot`. |
+| `malformed` or another code | The Service could not parse the request; a URL that is not the Service `/v1` URL also ends here. | Check `TG_SUPPORT_SERVICE_URL`; upgrade the SDK. |
+
+### Runtime results
+
+`send` never throws; it returns `{ kind: "accepted" }`, `{ kind: "retryable", reason, retryAfterMs? }` (`network`, `rate_limited`, `server_error`: retry the same events later) or `{ kind: "fatal", status, reason, detail, acceptedTypes? }` (the codes above; retrying the same request without a fix does not help). `claim`, `poll` and the grammY middleware throw `ServiceError`, whose `result` is that same failure. With `bot_inactive` or `account_blocked`, the Service still accepts `operation_result` and `user_forget` events; `acceptedTypes` lists them so you can resend those separately. Before `start()` completes, the grammY adapter's `normalize`, `execute` and `handleUpdate` throw `NotStartedError`.
+
+## Event delivery
+
+`handleUpdate` normalizes the update into a sealed tg-support event and sends it; with `waitUntil` the send continues after you answer Telegram, otherwise it is awaited. A failed send is only logged. Pass a logger to see its diagnostic codes, which never include update bodies:
+
+```ts
+import { createWebTgSupport, parseKeys } from "tg-support-sdk";
+
+function env(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Set ${name}.`);
+  return value;
+}
+
+const tgSupport = createWebTgSupport({
+  botToken: env("BOT_TOKEN"),
+  service: { url: env("TG_SUPPORT_SERVICE_URL"), botSecret: env("TG_SUPPORT_SECRET") },
+  keys: parseKeys({ tokenKey: env("TOKEN_KEY"), sealKeys: env("SEAL_KEYS") }),
+  supportGroupId: Number(env("SUPPORT_GROUP_ID")),
+  features: { notificationsTopic: false, welcomeHint: false },
+  transport: { kind: "push", hostUrl: env("TG_SUPPORT_HOST_URL") },
+  configRevision: Number(env("TG_SUPPORT_CONFIG_REVISION")),
+}, {
+  logger: { warn: event => console.warn("tg-support", event.kind, event.reason ?? "") },
+});
+
+export async function onTelegramUpdate(update: unknown): Promise<void> {
+  // Immediate delivery: wait for the Service before acknowledging the update.
+  const event = await tgSupport.normalize(update);
+  if (!event) return;
+  const result = await tgSupport.send([event]);
+  if (result.kind !== "accepted") throw new Error(`tg-support did not accept the event: ${result.reason}`);
+}
+```
+
+Without a host retry policy, an event can be lost during an outage. For durable delivery, save the normalized event in your own outbox before acknowledging Telegram, and resend that exact event (with the same `eventId`) until it is accepted. Normalizing the same update again gives the same `eventId`, and the Service ignores repeats, so retries are safe. Keep each user's events in order:
+
+```ts
+import type { TgSupport, TgSupportEvent } from "tg-support-sdk";
+
+// Your storage, for example a database table.
+export interface Outbox {
+  put(id: string, event: TgSupportEvent): Promise<void>;
+  ready(): AsyncIterable<{ id: string; event: TgSupportEvent }>;
+  remove(id: string): Promise<void>;
+  defer(id: string, delayMs: number | undefined): Promise<void>;
+  block(id: string, reason: string): Promise<void>;
+}
+
+export async function accept(tgSupport: TgSupport, outbox: Outbox, update: unknown): Promise<void> {
+  const event = await tgSupport.normalize(update);
+  if (event) await outbox.put(event.eventId, event);
+}
+
+// A separate worker preserves acceptance order within each user's events.
+export async function drain(tgSupport: TgSupport, outbox: Outbox): Promise<void> {
+  for await (const entry of outbox.ready()) {
+    const result = await tgSupport.send([entry.event]);
+    if (result.kind === "accepted") await outbox.remove(entry.id);
+    else if (result.kind === "retryable") await outbox.defer(entry.id, result.retryAfterMs);
+    else await outbox.block(entry.id, result.reason);
+  }
+}
+```
+
+The grammY middleware sends each event and awaits `next()`; a failed send throws `ServiceError`, which grammY passes to `bot.catch`. Pass an `onEvents` callback to `middleware` to deliver events your own way, as `deliver` in 6b or into an outbox. Do not install grammY retry or throttling transformers for support calls; the Service owns Telegram retries and quotas.
+
+## Reference
+
+### Other Telegram clients and lower-level calls
+
+For another Telegram client, `createTgSupport({ config, telegramBotId, botApi, ...options })` accepts a typed `BotApi` adapter; `getChatMember` must report `canManageTopics` and `canPinMessages`. All constructors accept options: a `fetch(Request)` function, a millisecond `clock.now()`, a `logger` for diagnostic codes and an optional `resolveProfile(userId)`.
+
+The lower-level interface exposes `normalize`, `hostNotice`, `userForget`, `send`, `receivePush`, `execute`, `claim` and `heartbeat`. A host without grammY polls with `claim()`, then `execute(command)` and `send([result])` for each command, in its own loop with its own retries. Claim responses require a valid Service signature. Push and pull use the same command authorization, sealed data and result events.
+
+For Node TypeScript hosts that check dependency declarations (`skipLibCheck: false`) and use grammY, install `@types/node` and `@types/node-fetch@2` as development dependencies: grammY's Node declarations import `fs` and node-fetch 2, whose [TypeScript instructions](https://github.com/node-fetch/node-fetch#typescript) require the separate types. The main Web entry does not need them.
+
+### Templates
+
+`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and pinned-header link.
 
 Language selection uses an exact match, then the base language, then `fallback`. If an override lacks that translation but has a fallback-language translation, the fallback callback receives the fallback language. A template without an override keeps its SDK text. Unknown or wrong-slot template IDs are rejected before Telegram is called.
 
-The lower-level interface also exposes `normalize`, `hostNotice`, `userForget`, `send`, `receivePush`, `execute`, `claim` and `heartbeat`. `send` returns `accepted`, `retryable` or `fatal`; `claim` throws `ServiceError` with that structured failure result. Callers using these lower-level methods own retries and scheduling. The Web façade registers each attempt's execution once when it accepts a command batch.
+### Changing the support group
+
+Increase `configRevision`, register the new `supportGroupId` (`configure` or `start()`), and keep the former IDs in `previousSupportGroupIds`, for example `previousSupportGroupIds: [oldSupportGroupId]`. Store this list with your host configuration so it survives every restart. It is local to the host and is not sent to the Service.
+
+The Service keeps pending private copies, edits and reactions for operator replies already accepted from the previous group. The SDK permits those groups only as authenticated sources for the command's own private-chat user, using the original topic or notice binding. Every group destination remains the current `supportGroupId`; new updates from previous groups are ignored. Without the list, previous groups are rejected. Keep a previous ID while its pending deliveries must still succeed, and keep the original host keys. Returning to a former group creates fresh user topics.
+
+### Keys
+
+Store `TOKEN_KEY` permanently: replacing it changes users' identities and loses every topic and message link. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key seals new data, and the others open older data. `npx tg-support-sdk keys --seal` creates another seal entry: put it first when rotating, and never remove old entries.
+
+### Messages, edits and reactions
 
 For a support reply, `replyScopedMessageId` contains the current operator message ID sealed under the replied-to message token. A notice binding authorizes that notice's scope and user; the message being copied is the operator's reply, which has its own distinct ID.
 
 Edited messages preserve text or caption, Telegram entities, link-preview options and caption position in sealed content. A media edit without the optional caption becomes an empty caption, so removing a caption also reaches the copy. Each edit reports its `(editDate, updateId)` revision; the Service selects the latest revision and handles replacement when Telegram can no longer edit the copy. Telegram error codes and descriptions remain available in the operation result for that decision.
 
-Private and support reaction updates carry the complete new list in a sealed block. An empty list removes reactions from the paired message. Commands accept sealed reactions or the delivery marker `👀`; other open reaction values are rejected. Support reaction events identify the group and message without a topic field, because Telegram does not include a topic ID in these updates.
+Private and support reaction updates carry the complete new list in a sealed block. An empty list removes reactions from the paired message. Commands accept sealed reactions or the delivery marker `👀`; other open reaction values are rejected. Support reaction events identify the group and message without a topic field, because Telegram does not include a topic ID in these updates. A user's reaction to an operator reply appears in the topic as a short notice replying to the operator's message.
 
 Support edits and reactions seal their content under the source message token. Commands consuming them provide `source_message_id`: the sealed ID already stored for the group side of the message pair. A THREAD- or notice-scoped source ID also requires its existing topic or notice binding. The SDK authenticates this proof for the command's user, checks its group chat and opens content only for that message; the target message ID is checked against the destination chat separately. Private USER-scoped content omits `source_message_id`.
 
-When changing the support group, increase `configRevision`, restart the Host with the new `supportGroupId`, and explicitly retain the former IDs in `previousSupportGroupIds`, for example `previousSupportGroupIds: [oldSupportGroupId]`. Store this list with your Host configuration so it survives every restart. The constructor validates and copies it; changing the caller's array later does not change the SDK's permissions. This list is local to the Host and is not sent to the Service.
-
-The Service keeps pending private copies, edits and reactions for operator replies already accepted from the previous group. The SDK permits those groups only as authenticated sources for the command's own private-chat user, using the original topic or notice binding. Every group destination remains the current `supportGroupId`; new updates from previous groups are ignored. With no history list, previous groups are rejected. Keep a previous ID permitted while its pending deliveries must still succeed, and retain the original Host keys. Returning to a former group creates fresh user topics.
-
-Generate keys explicitly with `npx tg-support-sdk keys`. Store `TOKEN_KEY` permanently: replacing it changes users' semantic identities. `SEAL_KEYS` is a comma-separated `kid:base64url-key` list; the first key encrypts new data, and retained keys decrypt older blobs. `npx tg-support-sdk keys --seal` creates another seal entry. Add it before existing entries when rotating; never remove any old entries.
-
-Run deployment configuration explicitly:
-
-```sh
-npx tg-support-sdk configure --config ./tg-support-config.mjs
-```
-
-The module's default export is the same configuration passed to `createWebTgSupport`. Use one build revision for the deployment and this command. Configuration checks Telegram `getMe`, the support forum and the bot's administrator, Manage Topics and Pin Messages permissions, then sends `bot_configured` to the service. Any failed check throws `StartupError` listing every problem with advice and sends nothing; for example, a bot without Pin Messages gets `bot_cannot_pin_messages` (without it the bot cannot unpin and pin topic headers), and the CLI exits with status 1. It does not set the Telegram webhook. The CLI uses Node; importing the main SDK entry does not load it.
-
-Keep a backup of `TOKEN_KEY` outside the host. Losing it loses every user topic and message link; it cannot be rotated. Keep every old seal key permanently. The host owns event delivery, retries and acceptance order. Use `normalize` plus `send` with your existing durable outbox when dropping a transient event is unacceptable; `handleUpdate` logs a failed send and does not enqueue it.
-
-For a long-lived grammY host, install `grammy`.
-
-For a Node TypeScript host that checks dependency declarations (`skipLibCheck: false`), install `@types/node` and `@types/node-fetch@2` as development dependencies. grammY's Node declarations import `fs` and node-fetch 2, whose [upstream TypeScript instructions](https://github.com/node-fetch/node-fetch#typescript) require the separate v2 types. The main Web SDK entry does not need these packages or grammY.
-
-Import the separate adapter:
-
-```ts
-import { Bot } from "grammy";
-import { createGrammyTgSupport } from "tg-support-sdk/grammy";
-
-const bot = new Bot(env.BOT_TOKEN);
-const tgSupport = createGrammyTgSupport(bot, config);
-await tgSupport.start();
-bot.use(tgSupport.middleware());
-// Register the product's handlers after this middleware, or explicitly select updates before passing them on.
-await bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] });
-```
-
-`start()` runs the same checks as `configure` (including Pin Messages), registers `bot_configured` and initializes grammY's bot identity. Calls sharing a startup wait for the same check; another call after successful startup does not register again. Before startup, `normalize` and `execute` throw `NotStartedError`; the command endpoint returns 503. The middleware sends normalized events and awaits `next()`. A failed send throws `ServiceError`, so the host can apply its update retry policy. Pass an `onEvents` callback to `middleware` to write events to an existing outbox instead. Do not install inline grammY retry or throttling transformers for support calls; the Service owns Telegram retry policy and quotas.
-
-Use `handleCommandRequest` as the push endpoint, with the same `Request`, `Response` and optional `waitUntil` interface as the Web adapter. Telegram calls use `bot.api` and its transformers. Telegram errors preserve their code, description and `retry_after`; transport errors contain no external exception details.
-
-For local getUpdates development without a public URL, set `transport: { kind: "pull" }`. Use a separate test bot that does not have a Telegram webhook. The host schedules both loops; the SDK creates no timer:
-
-```ts
-import { setTimeout as sleep } from "node:timers/promises";
-const tgSupport = createGrammyTgSupport(bot, { ...config, transport: { kind: "pull" } });
-await tgSupport.start();
-bot.use(tgSupport.middleware());
-const controller = new AbortController();
-process.once("SIGINT", () => { controller.abort(); void bot.stop(); });
-await Promise.all([
-  bot.start({ allowed_updates: ["message", "edited_message", "message_reaction", "callback_query"] }),
-  (async () => {
-    while (!controller.signal.aborted) {
-      await tgSupport.poll();
-      await sleep(1000, undefined, { signal: controller.signal }).catch(() => {});
-    }
-  })(),
-]);
-```
-
-`poll()` makes one signed claim, executes each authenticated command and sends its result. It throws `ServiceError` on claim or result-send failure; choose retries and shutdown behavior in your host. A host without grammY uses `claim()` followed by `execute(command)` and `send([result])` in its own loop. Claim replies require a valid response signature. Push and pull use the same command authorizer, sealed data and result events.
+Telegram errors keep their code, description and `retry_after` in operation results; transport errors contain no external exception details.

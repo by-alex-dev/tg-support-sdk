@@ -5,6 +5,8 @@
 - `configure` and grammY `start()` also check that the Bot may pin messages in the support group. An administrator without Pin Messages fails with the new startup problem `bot_cannot_pin_messages` ("Grant the bot the Pin Messages permission."); `bot_configured` is not sent and the grammY host does not start (the command endpoint keeps answering 503). Previously such a Bot registered successfully and then could not unpin and pin topic headers. The group creator passes, as for Manage Topics.
 - `GroupFacts` gains a required `canPinMessages` field. Custom `BotApi` implementations passed to `createTgSupport` must report it from `getChatMember` (`can_pin_messages`); omitting it is reported as `bot_cannot_pin_messages`.
 - `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.0`. Protocol v1, Host keys and configuration remain compatible with 1.1.
+- The README is rewritten as a step-by-step guide for connecting a bot from scratch: the Service bot and Service URL, the signing secret, support group rights (Manage Topics and Pin Messages), the group ID, operators, the `features` flags, when `configure` is needed, and push and pull hosts. Every TypeScript example is self-contained, reads its values from the environment and is compiled against the built package in the SDK tests. The pull example retries transient Service and Telegram failures with backoff instead of crashing. `ConfigError` messages and `configure`/`start()` problem codes are documented with an action for each.
+- The package manifest declares `description`, `homepage` and `license` (`UNLICENSED`). Maintainer publishing instructions are no longer in the README or the published package.
 
 ## 1.1.0 — published 2026-10-13
 
@@ -32,5 +34,3 @@ The public API is stabilized without breaking changes from 0.5.0. Existing Host 
 - Design signatures match the existing implementation. Existing SDK conformance owners exercise the built public package entries.
 - Service messages are filtered against the grammY Message fields while ordinary invoice, giveaway and suggested-post content continues to produce normalized user events.
 - Optional `previousSupportGroupIds` explicitly permits former groups as sources of pending private operator copies, edits and reactions after a group switch. Group destinations remain current, and the existing user and binding checks apply.
-
-Publication and Host adoption remain separate from source preparation; release artifacts do not replace live onboarding and Telegram verification.
