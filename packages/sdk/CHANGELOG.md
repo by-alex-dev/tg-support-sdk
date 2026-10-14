@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.2 — 2026-10-14
+## 1.2.2 — published 2026-10-14
 
 - Docs: the package description on npm reads "connect a Telegram bot so every user gets their own topic in your support forum group, where operators reply."
 - First release published from the public mirror `by-alex-dev/tg-support-sdk` through npm trusted publishing, with a provenance attestation for the mirror commit.
