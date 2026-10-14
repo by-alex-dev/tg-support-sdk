@@ -45,8 +45,11 @@ Never send the Telegram bot token or your host keys to the Service bot. `/help` 
 
 ```sh
 npm install --save-exact tg-support-sdk
+npm pkg set type=module
 npx tg-support-sdk keys
 ```
+
+The examples below are ES modules, so the host project's `package.json` needs `"type": "module"`, which `npm pkg set type=module` writes. `npm init` writes `"type": "commonjs"`, and Node then stops at the first `import` with `SyntaxError: Cannot use import statement outside a module`. In an existing CommonJS project, skip `npm pkg set` and give the Node examples the `.mts` extension instead (`pull-host.mts`, `tg-support.config.mts`). Node runs TypeScript files directly from version 22.18 (and 23.6), with no compiler or loader; use Node 24, which the SDK supports.
 
 `keys` prints `TOKEN_KEY=…` and `SEAL_KEYS=…`. Back up `TOKEN_KEY` outside the host now, then store both only in your host's secrets. The keys never leave your host; the Service never sees them.
 
@@ -170,7 +173,7 @@ export default {
 npx tg-support-sdk configure --config ./tg-support.config.ts
 ```
 
-Node 24 loads a `.ts` module directly; a `.mjs` module without the type annotation works the same. Keep the functions' environment and the `configure` environment describing the same bot, group, features, URL and revision. On success the command prints `tg-support configuration registered.`; on failure it prints every problem with advice and exits with status 1 (see [Errors](#errors)). After the first registration the Service confirms `TG_SUPPORT_HOST_URL` with a signed challenge to your command endpoint, so deploy the endpoint first.
+Node loads this `.ts` module directly in an ES module project (step 3); a `.mjs` module without the type annotation works the same. Keep the functions' environment and the `configure` environment describing the same bot, group, features, URL and revision. On success the command prints `tg-support configuration registered.`; on failure it prints every problem with advice and exits with status 1 (see [Errors](#errors)). After the first registration the Service confirms `TG_SUPPORT_HOST_URL` with a signed challenge to your command endpoint, so deploy the endpoint first.
 
 Finally, point Telegram's webhook at `functions/telegram.ts`; the SDK does not set it:
 
