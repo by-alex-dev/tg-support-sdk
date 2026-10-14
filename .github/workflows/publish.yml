@@ -1,0 +1,50 @@
+name: Publish to npm
+
+# A tag sdk-vX.Y.Z on a commit of main publishes tg-support-sdk@X.Y.Z with npm provenance through
+# trusted publishing (OIDC): no npm token exists anywhere. The trusted publisher on npmjs.com names
+# this repository and this file, so a renamed file or a fork cannot publish.
+
+on:
+  push:
+    tags: ['sdk-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # npm provenance and trusted publishing accept only GitHub-hosted runners.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: The tag points at a commit of main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: The tag names the package version and its CHANGELOG entry is dated
+        run: node scripts/check-sdk-release.mjs "$GITHUB_REF_NAME"
+      - name: npm supports trusted publishing (11.5.1 or later)
+        run: |
+          version=$(npm --version)
+          echo "npm $version"
+          test "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n1)" = 11.5.1
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm publish --workspace tg-support-sdk --access public --provenance --ignore-scripts
+      - name: Summary
+        run: |
+          version=${GITHUB_REF_NAME#sdk-v}
+          echo "Published tg-support-sdk@$version from $GITHUB_SHA: https://www.npmjs.com/package/tg-support-sdk/v/$version" >> "$GITHUB_STEP_SUMMARY"

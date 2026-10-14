@@ -19,3 +19,7 @@ npm test
 ```
 
 Requires Node 24.
+
+## Releases
+
+`tg-support-sdk` is published to npm only from this repository: a tag `sdk-vX.Y.Z` on a commit of `main` runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml), which builds, tests and publishes with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) through trusted publishing, without an npm token. The provenance attestation on npm names the commit of this repository the package was built from; check it with `npm audit signatures` or on the package page.
