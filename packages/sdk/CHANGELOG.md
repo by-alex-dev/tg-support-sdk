@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.1 — 2026-10-14
+## 1.2.1 — published 2026-10-14
 
 - The README's step 3 sets `"type": "module"` with `npm pkg set type=module` in a new project. In a project created by `npm init -y`, which npm 11 marks `"type": "commonjs"`, `node pull-host.ts` previously failed with `SyntaxError: Cannot use import statement outside a module`. An existing project keeps its module type and saves the Node examples as `.mts`. The README names Node 22.18 (and 23.6) as the first versions that run `.ts` files directly.
 - `npx tg-support-sdk configure` tells a config module that cannot be loaded apart from an invalid configuration. A `.ts` module that Node loads as CommonJS gets advice to set `"type": "module"` or use `.mts`; another load failure prints `Could not load the config module (<error class>).`, without the error's message, which could contain a host secret; a module without a default export says so. A `ConfigError` still prints `Configuration failed. Check the config module and host secrets.`
