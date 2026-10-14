@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — unreleased
+
+- The README's step 3 sets `"type": "module"` with `npm pkg set type=module`. In a project created by `npm init -y`, which npm 11 marks `"type": "commonjs"`, `node pull-host.ts` previously failed with `SyntaxError: Cannot use import statement outside a module`. The README explains the setting, gives the `.mts` extension for an existing CommonJS project and names Node 22.18 (and 23.6) as the first versions that run `.ts` files directly.
+- The SDK tests run the README's pull example in a fresh `npm init -y` project set up by the README's commands, without edits.
+- `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.1`. The code, public API, protocol v1, Host keys and configuration are unchanged from 1.2.0.
+
 ## 1.2.0 — published 2026-10-13
 
 - `configure` and grammY `start()` also check that the Bot may pin messages in the support group. An administrator without Pin Messages fails with the new startup problem `bot_cannot_pin_messages` ("Grant the bot the Pin Messages permission."); `bot_configured` is not sent and the grammY host does not start (the command endpoint keeps answering 503). Previously such a Bot registered successfully and then could not unpin and pin topic headers. The group creator passes, as for Manage Topics.
