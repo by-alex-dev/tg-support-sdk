@@ -48,6 +48,15 @@ npm install --save-exact tg-support-sdk
 npx tg-support-sdk keys
 ```
 
+The examples below are ES modules. In a new project, mark the whole project as ES modules; `npm init` writes `"type": "commonjs"`, and Node then stops at the first `import` with `SyntaxError: Cannot use import statement outside a module`:
+
+```sh
+# New project only: an existing project's .js files would change meaning.
+npm pkg set type=module
+```
+
+In an existing project whose `package.json` does not already say `"type": "module"`, leave it as it is and give the Node examples the `.mts` extension instead: save them as `pull-host.mts` and `tg-support.config.mts` and use those names in the commands. Node runs TypeScript files directly from version 22.18 (and 23.6), with no compiler or loader; use Node 24, which the SDK supports.
+
 `keys` prints `TOKEN_KEY=…` and `SEAL_KEYS=…`. Back up `TOKEN_KEY` outside the host now, then store both only in your host's secrets. The keys never leave your host; the Service never sees them.
 
 ### 4. Prepare the support group
@@ -170,7 +179,7 @@ export default {
 npx tg-support-sdk configure --config ./tg-support.config.ts
 ```
 
-Node 24 loads a `.ts` module directly; a `.mjs` module without the type annotation works the same. Keep the functions' environment and the `configure` environment describing the same bot, group, features, URL and revision. On success the command prints `tg-support configuration registered.`; on failure it prints every problem with advice and exits with status 1 (see [Errors](#errors)). After the first registration the Service confirms `TG_SUPPORT_HOST_URL` with a signed challenge to your command endpoint, so deploy the endpoint first.
+Node loads this `.ts` module directly in an ES module project, or as `tg-support.config.mts` in a CommonJS one (step 3); a `.mjs` module without the type annotation works the same. Keep the functions' environment and the `configure` environment describing the same bot, group, features, URL and revision. On success the command prints `tg-support configuration registered.`; on failure it prints every problem with advice and exits with status 1 (see [Errors](#errors)). After the first registration the Service confirms `TG_SUPPORT_HOST_URL` with a signed challenge to your command endpoint, so deploy the endpoint first.
 
 Finally, point Telegram's webhook at `functions/telegram.ts`; the SDK does not set it:
 
@@ -297,7 +306,7 @@ From a Telegram account that is not in the support group, send a message to your
 | `Invalid Telegram bot token.` | Copy the token from @BotFather. |
 | `Template fallback must belong to the configured languages.` | Add `templates.fallback` to `templates.languages`. |
 
-The `configure` CLI prints `Configuration failed. Check the config module and host secrets.` for a configuration module that cannot be loaded or a `ConfigError`; check the variables above.
+The `configure` CLI prints `Configuration failed. Check the config module and host secrets.` for a `ConfigError`; check the variables above. A config module that cannot be loaded gets `Could not load the config module (<error class>).` instead, for example `ConfigError` from `parseKeys` or `Error` from a missing variable; the CLI never prints the error's message, which could contain a secret. A `.ts` module in a CommonJS project gets advice to set `"type": "module"` or use the `.mts` extension (step 3).
 
 ### `StartupError`: `configure` and `start()` problems
 
