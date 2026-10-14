@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2 — 2026-10-14
+
+- Docs: the package description on npm reads "connect a Telegram bot so every user gets their own topic in your support forum group, where operators reply."
+- First release published from the public mirror `by-alex-dev/tg-support-sdk` through npm trusted publishing, with a provenance attestation for the mirror commit.
+- `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.2`. Code, the public API, protocol v1, Host keys and configuration are unchanged from 1.2.1.
+
 ## 1.2.1 — published 2026-10-14
 
 - The README's step 3 sets `"type": "module"` with `npm pkg set type=module` in a new project. In a project created by `npm init -y`, which npm 11 marks `"type": "commonjs"`, `node pull-host.ts` previously failed with `SyntaxError: Cannot use import statement outside a module`. An existing project keeps its module type and saves the Node examples as `.mts`. The README names Node 22.18 (and 23.6) as the first versions that run `.ts` files directly.
