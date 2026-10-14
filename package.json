@@ -1,0 +1,21 @@
+{
+  "name": "tg-support-sdk-mirror",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "packages/protocol",
+    "packages/sdk"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace tg-support-protocol && npm run build --workspace tg-support-sdk",
+    "test": "npm test --workspace tg-support-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "typescript": "6.0.3"
+  }
+}
