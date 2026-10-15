@@ -60,7 +60,8 @@
         "edit_content",
         "reactions",
         "notice_text",
-        "binding"
+        "binding",
+        "start_payload"
       ],
       "title": "BlobPurpose"
     },
@@ -332,6 +333,9 @@
         },
         "is_start": {
           "type": "boolean"
+        },
+        "start_payload": {
+          "$ref": "#/definitions/SealedBlob"
         }
       },
       "required": [
@@ -1240,6 +1244,9 @@
             },
             "user": {
               "$ref": "#/definitions/SealedRef"
+            },
+            "source": {
+              "$ref": "#/definitions/SealedRef"
             }
           },
           "required": [
@@ -1670,6 +1677,20 @@
       ],
       "additionalProperties": true,
       "title": "LanguagePayload"
+    },
+    "StartPayloadPayload": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": true,
+      "title": "StartPayloadPayload"
     },
     "TopicBinding": {
       "type": "object",

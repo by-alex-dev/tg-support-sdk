@@ -6,7 +6,7 @@ function reactionText(reactions: readonly Record<string, Json>[], language: "ru"
 }
 
 export function renderTemplate(id: TemplateId, code: string | null, profile: TelegramUserProfile | null, config?: TemplateConfig, verifiedUserId: number | null = null,
-  reactions: readonly Record<string, Json>[] | null = null): FormattedText {
+  reactions: readonly Record<string, Json>[] | null = null, source: string | null = null): FormattedText {
   const languages = config?.languages ?? ["ru", "en"];
   const fallback = config?.fallback ?? "en";
   const requested = code?.toLowerCase() ?? "";
@@ -17,7 +17,7 @@ export function renderTemplate(id: TemplateId, code: string | null, profile: Tel
   const builtinLanguage = language === "ru" || language === "en" ? language : fallback === "ru" ? "ru" : "en";
   const reacted = reactions === null ? null : reactionText(reactions, builtinLanguage);
   let rendered: FormattedText;
-  if (override) rendered = override({ profile, language, verifiedUserId, reactions: reacted });
+  if (override) rendered = override({ profile, language, verifiedUserId, reactions: reacted, source });
   else {
     const fullName = [profile?.firstName, profile?.lastName].filter((part) => part && part.trim() !== "").join(" ");
     const name = fullName || (profile?.username ? `@${profile.username}` : "");
@@ -38,7 +38,8 @@ export function renderTemplate(id: TemplateId, code: string | null, profile: Tel
       const label = texts[id]; const prefix = fullName ? `${label} ` : `${label} 👤 `; const linked = fullName || String(verifiedUserId);
       const tail = [profile?.username ? `@${profile.username}` : null, `(#u${verifiedUserId})`].filter((part) => part !== null).join(" ");
       const instruction = id === "topic_header" ? builtinLanguage === "ru" ? "Пишите в этой теме, и пользователь получит ответ в своём чате с ботом." : "Write in this topic and the user will receive your reply in their chat with the bot." : builtinLanguage === "ru" ? "Чтобы написать пользователю, ответьте на это сообщение." : "Reply to this message to contact the user.";
-      rendered = { text: `${prefix}${linked} ${tail}\n\n${instruction}`, entities: [{ type: "text_link", offset: prefix.length, length: linked.length, url: `tg://user?id=${verifiedUserId}` }] };
+      const origin = id === "topic_header" && source !== null ? `\n${builtinLanguage === "ru" ? "Источник:" : "Source:"} ${source}` : "";
+      rendered = { text: `${prefix}${linked} ${tail}${origin}\n\n${instruction}`, entities: [{ type: "text_link", offset: prefix.length, length: linked.length, url: `tg://user?id=${verifiedUserId}` }] };
     }
   }
   return id === "topic_title" ? { ...rendered, text: Array.from(rendered.text).slice(0, 128).join("") } : rendered;

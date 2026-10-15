@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `/start <payload>` from a deep link (`t.me/<bot>?start=<payload>`, 1–64 characters `A-Z a-z 0-9 _ -`) gives `user_message` a sealed `start_payload`. The service hands it back in the `topic_header` it posts for that message, and the SDK shows it as «Источник» / «Source» in the default header; a template override reads it as `source` in its render context (null otherwise). A service that predates this ignores the field, and a header without `source` renders as before.
 - New export `allowedUpdates`: the update types a Host requests from Telegram, the same list as `TgSupport.allowedUpdates`, available before a `TgSupport` is created.
 
 ## 1.2.3 — 2026-10-15

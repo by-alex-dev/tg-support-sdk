@@ -145,7 +145,15 @@ export function createExecutor(config: TgSupportConfig, keys: Keyring, botApi: B
           if (options.resolveProfile) profile = await options.resolveProfile(verifiedUserId);
           else { const response = await botApi.getProfile({ method: "getChat", chatId: verifiedUserId }); if (!response.ok) throw new ProfileFailed(response); profile = response.profile; }
         }
-        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, verifiedUserId, reactions);
+        let source: string | null = null;
+        if (id === "topic_header" && ref.source !== undefined) {
+          const opened = await keys.open("start_payload", [command.subject], sealed(ref.source));
+          if (!opened.ok) throw new Rejected(opened.error);
+          const checked = validators.parse("StartPayloadPayload", opened.value);
+          if (!checked.ok) throw new Rejected("malformed");
+          source = checked.value.payload;
+        }
+        return renderTemplate(id, languageValue.value.language_code, profile, config.templates, verifiedUserId, reactions, source);
       };
       let request: TelegramRequest;
       switch (command.method) {

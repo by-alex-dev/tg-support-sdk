@@ -48,7 +48,8 @@ export type BlobPurpose =
   | "edit_content"
   | "reactions"
   | "notice_text"
-  | "binding";
+  | "binding"
+  | "start_payload";
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
  * via the `definition` "TemplateId".
@@ -138,6 +139,7 @@ export type TextTemplateRef =
       template: "topic_header" | "new_user_notice";
       language: SealedRef;
       user: SealedRef;
+      source?: SealedRef;
       [k: string]: unknown | undefined;
     }
   | {
@@ -240,6 +242,7 @@ export interface UserMessageEvent {
   copyable: boolean;
   is_bot_command: boolean;
   is_start: boolean;
+  start_payload?: SealedBlob;
   [k: string]: unknown | undefined;
 }
 /**
@@ -700,6 +703,14 @@ export interface LanguagePayload {
 }
 /**
  * This interface was referenced by `ProtocolV1`'s JSON-Schema
+ * via the `definition` "StartPayloadPayload".
+ */
+export interface StartPayloadPayload {
+  payload: string;
+  [k: string]: unknown | undefined;
+}
+/**
+ * This interface was referenced by `ProtocolV1`'s JSON-Schema
  * via the `definition` "TopicBinding".
  */
 export interface TopicBinding {
@@ -837,6 +848,7 @@ export interface SchemaTypes {
   MessageIdPayload: MessageIdPayload;
   ThreadIdPayload: ThreadIdPayload;
   LanguagePayload: LanguagePayload;
+  StartPayloadPayload: StartPayloadPayload;
   TopicBinding: TopicBinding;
   NoticeBinding: NoticeBinding;
   Binding: Binding;

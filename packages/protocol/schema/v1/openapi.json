@@ -589,6 +589,9 @@
       "LanguagePayload": {
         "$ref": "./schema.json#/definitions/LanguagePayload"
       },
+      "StartPayloadPayload": {
+        "$ref": "./schema.json#/definitions/StartPayloadPayload"
+      },
       "TopicBinding": {
         "$ref": "./schema.json#/definitions/TopicBinding"
       },

@@ -122,7 +122,11 @@ export function createNormalizer(config: TgSupportConfig, botId: number, keys: K
         const copyable = message.has_protected_content !== true && chat.has_protected_content !== true && copyableFields.some((field) => message[field] !== undefined);
         if (personal) {
           const entities = Array.isArray(message.entities) ? message.entities.map(record) : []; const isBotCommand = entities.some((entity) => entity?.type === "bot_command" && entity.offset === 0);
-          return { type: "user_message", eventId: id, ...await profileFields(from.id, parseProfile(from)), message: token, messageId, replyTo, copyable, isBotCommand, isStart: isBotCommand && typeof message.text === "string" && /^\/start(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(message.text) };
+          const isStart = isBotCommand && typeof message.text === "string" && /^\/start(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(message.text);
+          // Only what a deep link can carry (`t.me/<bot>?start=<payload>`) is a payload; other words after /start are just typed.
+          const payload = isStart ? /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{1,64})\s*$/.exec(String(message.text))?.[1] : undefined;
+          return { type: "user_message", eventId: id, ...await profileFields(from.id, parseProfile(from)), message: token, messageId, replyTo, copyable, isBotCommand, isStart,
+            ...(payload === undefined ? {} : { startPayload: await keys.seal("start_payload", subject, { payload }) }) };
         }
         return { type: "support_message", eventId: id, group: await keys.token("group", chat.id), thread: subject, message: token, messageId, replyTo, replyScopedMessageId: replyTo ? await keys.seal("message_id", replyTo, { message_id: message.message_id, chat_id: chat.id }) : null, copyable };
       } catch { return null; }
