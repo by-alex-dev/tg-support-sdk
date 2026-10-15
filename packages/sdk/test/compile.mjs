@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)), '../..');
 
 // Type-checks Host TypeScript files against the built public package. The files live inside the repository's
-// node_modules so `tg-support-sdk`, grammy and @types/node resolve as they do for a Host.
+// node_modules so `tg-support-sdk`, grammy and @types/node resolve as they do for a Host. Imports may name `.ts`
+// files, as they must when Node runs TypeScript directly.
 export async function compileAgainstSdk(t, files) {
   await mkdir(join(root, 'node_modules/.cache'), { recursive: true });
   const dir = await mkdtemp(join(root, 'node_modules/.cache/tg-support-compile-'));
@@ -19,7 +20,7 @@ export async function compileAgainstSdk(t, files) {
   await writeFile(join(dir, 'tsconfig.json'), JSON.stringify({
     extends: join(root, 'tsconfig.base.json'),
     compilerOptions: {
-      module: 'preserve', moduleResolution: 'bundler', noEmit: true, declaration: false, sourceMap: false,
+      module: 'preserve', moduleResolution: 'bundler', noEmit: true, allowImportingTsExtensions: true, declaration: false, sourceMap: false,
       lib: ['ES2023', 'DOM', 'DOM.Iterable'], types: ['node'],
     },
     files: files.map(([file]) => file),
