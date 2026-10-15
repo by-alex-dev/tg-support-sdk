@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.3 — 2026-10-15
+
+- The package is licensed under the MIT License instead of `UNLICENSED`: `license` in the manifest is `MIT` and the archive includes `LICENSE`. The protocol package and conformance vectors in the public mirror `by-alex-dev/tg-support-sdk` are MIT-licensed as well.
+- `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.3`. Code, the public API, protocol v1, Host keys and configuration are unchanged from 1.2.2.
+
 ## 1.2.2 — published 2026-10-14
 
 - Docs: the package description on npm reads "connect a Telegram bot so every user gets their own topic in your support forum group, where operators reply."
