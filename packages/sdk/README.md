@@ -440,3 +440,7 @@ Private and support reaction updates carry the complete new list in a sealed blo
 Support edits and reactions seal their content under the source message token. Commands consuming them provide `source_message_id`: the sealed ID already stored for the group side of the message pair. A THREAD- or notice-scoped source ID also requires its existing topic or notice binding. The SDK authenticates this proof for the command's user, checks its group chat and opens content only for that message; the target message ID is checked against the destination chat separately. Private USER-scoped content omits `source_message_id`.
 
 Telegram errors keep their code, description and `retry_after` in operation results; transport errors contain no external exception details.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
