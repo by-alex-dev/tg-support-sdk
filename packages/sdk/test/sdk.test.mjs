@@ -1124,6 +1124,35 @@ test("host templates receive the authenticated user ID instead of unchecked prof
   assert.equal(seen.length, 1);
 });
 
+test("the deep link payload of /start reaches the topic_header template as its source, sealed for that user only", async () => {
+  const seen = [], sources = [];
+  const now = 1700000000000;
+  const tgSupport = createWebTgSupport({ ...config, templates: { languages: ["ru", "en"], fallback: "en", overrides: {
+    topic_header: { en: ({ source }) => { sources.push(source); return { text: "Header" }; } },
+  } } }, { clock: { now: () => now }, resolveProfile: async () => ({ firstName: "Display" }),
+    fetch: async (request) => { seen.push(await request.json()); return Response.json({ ok: true, result: { message_id: 77 } }); } });
+  const start = (id, text) => tgSupport.normalize({ update_id: id, message: { message_id: id, chat: { id, type: "private" },
+    from: { id, is_bot: false, first_name: "Customer", language_code: "en" }, text, entities: [{ type: "bot_command", offset: 0, length: 6 }] } });
+  const own = await start(123456789, "/start order-42");
+  const other = await start(987654321, "/start order-43");
+  assert.equal(typeof own.startPayload, "string", "The payload travels sealed");
+  assert.ok(!JSON.stringify(own).includes("order-42"));
+  for (const text of ["/start", "/start not a link", `/start ${"x".repeat(65)}`, "/start order#42"]) {
+    assert.equal((await start(123456789, text)).startPayload, undefined, `${text}: no deep link payload`);
+  }
+  const command = { opId: "31", attemptToken: "aaaaaaaaaaaaaaaaaaaaab", subject: own.user, binding: null, deadlineSeconds: 60, receivedAt: now, expiresAt: now + 60000,
+    method: "sendMessage", params: { chat_id: { sealed: own.chat }, text: { template: "topic_header", language: { sealed: own.language }, user: { sealed: own.chat },
+      source: { sealed: own.startPayload } } } };
+  assert.equal((await tgSupport.execute(command)).outcome.kind, "success");
+  const { source: _source, ...withoutSource } = command.params.text;
+  assert.equal((await tgSupport.execute({ ...command, params: { ...command.params, text: withoutSource } })).outcome.kind, "success",
+    "A header without a source, as from a service that predates it");
+  assert.deepEqual(sources, ["order-42", null]);
+  const rejected = await tgSupport.execute({ ...command, params: { ...command.params, text: { ...command.params.text, source: { sealed: other.startPayload } } } });
+  assert.deepEqual(rejected.outcome, { kind: "rejected_by_host", reason: "blob_invalid" });
+  assert.equal(seen.length, 2);
+});
+
 test("missing host translations use the default language and missing host templates keep the SDK text", async () => {
   const seen = [];
   const now = 1700000000000;
