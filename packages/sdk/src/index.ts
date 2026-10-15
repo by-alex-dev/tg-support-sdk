@@ -10,6 +10,8 @@ export { generateKeys, parseKeys } from "./crypto.ts";
 export { ConfigError, StartupError, ServiceError, NotStartedError } from "./errors.ts";
 export type * from "./types.ts";
 export { fetchBotApi } from "./bot-api.ts";
+/** The update types a Host's webhook or polling must request from Telegram (`allowed_updates`); the same list as `TgSupport.allowedUpdates`. */
+export const allowedUpdates: readonly string[] = Object.freeze(["message", "edited_message", "message_reaction", "callback_query"]);
 export function createTgSupport(input: { config: TgSupportConfig; botApi: BotApi; telegramBotId: number } & TgSupportOptions): TgSupport {
   const { config: original, botApi, telegramBotId: botId, ...options } = input;
   const config = validateConfig(original);
@@ -21,7 +23,7 @@ export function createTgSupport(input: { config: TgSupportConfig; botApi: BotApi
   };
   const link = createServiceLink(config, options);
   const tgSupport: TgSupport = {
-    allowedUpdates: ["message", "edited_message", "message_reaction", "callback_query"],
+    allowedUpdates,
     normalize: (update) => modules().normalizer.normalize(update),
     hostNotice: (user, text, idempotencyKey) => modules().normalizer.hostNotice(user, text, idempotencyKey),
     userForget: (userId) => modules().normalizer.userForget(userId),

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New export `allowedUpdates`: the update types a Host requests from Telegram, the same list as `TgSupport.allowedUpdates`, available before a `TgSupport` is created.
+
 ## 1.2.3 — 2026-10-15
 
 - The package is licensed under the MIT License instead of `UNLICENSED`: `license` in the manifest is `MIT` and the archive includes `LICENSE`. The protocol package and conformance vectors in the public mirror `by-alex-dev/tg-support-sdk` are MIT-licensed as well.
