@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-10-16
 
 - `/start <payload>` from a deep link (`t.me/<bot>?start=<payload>`, 1–64 characters `A-Z a-z 0-9 _ -`) gives `user_message` a sealed `start_payload`. The service hands it back in the `topic_header` it posts for that message, and the SDK shows it as «Источник» / «Source» in the default header; a template override reads it as `source` in its render context (null otherwise). A service that predates this ignores the field, and a header without `source` renders as before.
 - New export `allowedUpdates`: the update types a Host requests from Telegram, the same list as `TgSupport.allowedUpdates`, available before a `TgSupport` is created.
+- `configure` and grammY `start()` refused by the Service with `403 bot_paused` give the advice "Resume the bot with /resumebot <bot_id> in the Service bot." instead of the general "Check Service availability and the host configuration." The README lists `bot_paused` among the startup and runtime codes.
+- Docs: the README links to the step-by-step guide at tg-support.by-alex.dev/docs, mentions the free trial a new account gets when it accepts the terms, and documents the `allowedUpdates` export and the `source` field of the template render context.
+- `bot_configured.sdk_version` becomes `tg-support-sdk/1.3.0`. Protocol v1, Host keys and configuration remain compatible with 1.2; a Host that does not need the new fields needs no changes.
 
 ## 1.2.3 — published 2026-10-15
 

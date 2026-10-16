@@ -32,6 +32,7 @@ export class StartupError extends Error {
       invalid_host_url: "Use a public HTTPS command endpoint without credentials or a fragment.",
       account_blocked: "Contact the Service admin about the blocked account.",
       bot_inactive: "Upgrade the account plan or remove another bot in the Service bot.",
+      bot_paused: "Resume the bot with /resumebot <bot_id> in the Service bot.",
     };
     super(`tg-support configuration could not be registered. ${problems.map(problem => `${problem}: ${advice[problem] ?? "Check Service availability and the host configuration."}`).join(" ")}`);
     this.problems = problems;

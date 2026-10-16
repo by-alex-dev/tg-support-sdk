@@ -1198,3 +1198,15 @@ test("configure refuses a support group where the bot may manage topics but not 
   assert.deepEqual(requested.sort(), ["getChat", "getChatMember", "getMe"], "configuration must not reach the Service");
   assert.deepEqual(logs, [{ kind: "configuration_rejected", reason: "bot_cannot_pin_messages" }]);
 });
+
+test("configure tells the owner of a paused bot to resume it in the Service bot", async () => {
+  const options = { fetch: async request => {
+    const method = new URL(request.url).pathname.split("/").at(-1);
+    if (method === "getMe") return Response.json({ ok: true, result: { id: 12345, username: "test_bot", is_bot: true } });
+    if (method === "getChat") return Response.json({ ok: true, result: { id: config.supportGroupId, type: "supergroup", is_forum: true } });
+    if (method === "getChatMember") return Response.json({ ok: true, result: { status: "administrator", can_manage_topics: true, can_pin_messages: true } });
+    return Response.json({ reason: "bot_paused", detail: "" }, { status: 403 });
+  } };
+  await assert.rejects(configure(config, options), error => error.name === "StartupError" && error.problems.join() === "bot_paused" &&
+    error.message.includes("bot_paused: Resume the bot with /resumebot <bot_id> in the Service bot."));
+});

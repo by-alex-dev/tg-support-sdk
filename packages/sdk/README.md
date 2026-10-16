@@ -192,7 +192,7 @@ curl -sS "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
   --data-urlencode 'allowed_updates=["message","edited_message","message_reaction","callback_query"]'
 ```
 
-Add the update types your own bot needs to `allowed_updates`. The SDK needs the four shown (also available as `tgSupport.allowedUpdates`).
+Add the update types your own bot needs to `allowed_updates`. The SDK needs the four shown, also exported as `allowedUpdates` from `tg-support-sdk` (available before you create the SDK object) and as `tgSupport.allowedUpdates`.
 
 ### 6b. Long-lived grammY host with pull (local development, no public URL)
 
@@ -280,7 +280,7 @@ await Promise.all([
 ]);
 ```
 
-Run it with `node pull-host.ts` and the variables from step 5. A fatal `poll()` failure such as `bot_inactive` or `account_blocked` keeps the loop alive at a slow pace, so the host resumes once the account is fixed in the Service bot.
+Run it with `node pull-host.ts` and the variables from step 5. A fatal `poll()` failure such as `bot_inactive`, `bot_paused` or `account_blocked` keeps the loop alive at a slow pace, so the host resumes once the account is fixed in the Service bot.
 
 ### 6c. Long-lived grammY host with push
 
@@ -333,11 +333,12 @@ The `configure` CLI prints `Configuration failed. Check the config module and ho
 | `invalid_host_url` | The Service rejected `TG_SUPPORT_HOST_URL`. | Use a public HTTPS URL without credentials or a fragment that does not resolve to a private address. |
 | `account_blocked` | The Service admin blocked the account. | Contact the Service admin. |
 | `bot_inactive` | The account has no active access, or this bot is over the plan's bot limit. | Check `/plan`; upgrade or delete another bot with `/deletebot`. |
+| `bot_paused` | The bot was paused with `/pausebot` in the Service bot. | Resume it with `/resumebot <bot_id>`. |
 | `malformed` or another code | The Service could not parse the request; a URL that is not the Service `/v1` URL also ends here. | Check `TG_SUPPORT_SERVICE_URL`; upgrade the SDK. |
 
 ### Runtime results
 
-`send` never throws; it returns `{ kind: "accepted" }`, `{ kind: "retryable", reason, retryAfterMs? }` (`network`, `rate_limited`, `server_error`: retry the same events later) or `{ kind: "fatal", status, reason, detail, acceptedTypes? }` (the codes above; retrying the same request without a fix does not help). `claim`, `poll` and the grammY middleware throw `ServiceError`, whose `result` is that same failure. With `bot_inactive` or `account_blocked`, the Service still accepts `operation_result` and `user_forget` events; `acceptedTypes` lists them so you can resend those separately. Before `start()` completes, the grammY adapter's `normalize`, `execute` and `handleUpdate` throw `NotStartedError`.
+`send` never throws; it returns `{ kind: "accepted" }`, `{ kind: "retryable", reason, retryAfterMs? }` (`network`, `rate_limited`, `server_error`: retry the same events later) or `{ kind: "fatal", status, reason, detail, acceptedTypes? }` (the codes above; retrying the same request without a fix does not help). `claim`, `poll` and the grammY middleware throw `ServiceError`, whose `result` is that same failure. With `bot_inactive`, `bot_paused` or `account_blocked`, the Service still accepts `operation_result` and `user_forget` events; `acceptedTypes` lists them so you can resend those separately. Before `start()` completes, the grammY adapter's `normalize`, `execute` and `handleUpdate` throw `NotStartedError`.
 
 ## Event delivery
 
@@ -417,7 +418,7 @@ For Node TypeScript hosts that check dependency declarations (`skipLibCheck: fal
 
 ### Templates
 
-`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and Topic header link.
+`templates` accepts `languages`, `fallback` and per-template, per-language `overrides`. Render callbacks receive `{ profile, language, verifiedUserId, reactions, source }`. `reactions` is the rendered list for `user_reacted` (emoji as is, paid reactions as ⭐, custom emoji as a short label) and `null` for other templates. `source` is the deep link parameter the user came with (`t.me/<bot>?start=<payload>`, 1–64 characters `A-Z a-z 0-9 _ -`) for `topic_header`, and `null` otherwise; the default header shows it as «Источник» / "Source". For `topic_title`, `topic_header` and `new_user_notice`, the ID comes from the authenticated private-chat block after its user token is checked. A missing display profile does not remove that verified ID. Other templates receive `null`; omit mentions when there is no verified ID. Profile fields are display data and cannot supply the mention's identity. Use plain text and Telegram entities to keep names literal. Templates resolve the current profile at execution and include the verified user's ID in the default topic tag and Topic header link.
 
 Language selection uses an exact match, then the base language, then `fallback`. If an override lacks that translation but has a fallback-language translation, the fallback callback receives the fallback language. A template without an override keeps its SDK text. Unknown or wrong-slot template IDs are rejected before Telegram is called.
 
