@@ -5,7 +5,7 @@
 - `/start <payload>` from a deep link (`t.me/<bot>?start=<payload>`, 1–64 characters `A-Z a-z 0-9 _ -`) gives `user_message` a sealed `start_payload`. The service hands it back in the `topic_header` it posts for that message, and the SDK shows it as «Источник» / «Source» in the default header; a template override reads it as `source` in its render context (null otherwise). A service that predates this ignores the field, and a header without `source` renders as before.
 - New export `allowedUpdates`: the update types a Host requests from Telegram, the same list as `TgSupport.allowedUpdates`, available before a `TgSupport` is created.
 
-## 1.2.3 — 2026-10-15
+## 1.2.3 — published 2026-10-15
 
 - The package is licensed under the MIT License instead of `UNLICENSED`: `license` in the manifest is `MIT` and the archive includes `LICENSE`. The protocol package and conformance vectors in the public mirror `by-alex-dev/tg-support-sdk` are MIT-licensed as well.
 - `bot_configured.sdk_version` becomes `tg-support-sdk/1.2.3`. Code, the public API, protocol v1, Host keys and configuration are unchanged from 1.2.2.
