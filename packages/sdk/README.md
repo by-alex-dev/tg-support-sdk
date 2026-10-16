@@ -4,6 +4,8 @@ Connect your Telegram bot to tg-support: every user who writes to your bot gets 
 
 The main entry uses WebCrypto, `fetch`, `Request` and `Response` and has no runtime dependencies: it runs in Cloudflare Workers, Pages Functions and Node 24. The optional `tg-support-sdk/grammy` entry uses your own grammY installation. Release notes are in `CHANGELOG.md`, shipped in this package.
 
+The step-by-step guide, from creating the bot to the first message in a support topic, with code for each host shape, is at [tg-support.by-alex.dev/docs](https://tg-support.by-alex.dev/docs/en) ([in Russian](https://tg-support.by-alex.dev/docs/ru)). This README is the package reference.
+
 > **Back up `TOKEN_KEY` outside the host before connecting a bot. It is the only key to that bot's state: losing it loses every user topic and message link. It cannot be rotated.**
 >
 > **Never delete old `SEAL_KEYS` entries. Future replies, edits and reactions can need data sealed years earlier. Add a new current key; retain all old keys.**
@@ -36,7 +38,7 @@ Everything about your tg-support account happens in the Service bot in Telegram.
 In the Service bot:
 
 1. Send `/start` and accept the terms (`/terms` shows them again).
-2. Get access: pay for a plan (`/plan`) or redeem an invite code with `/invite <code>`.
+2. Get access: a new account gets a free trial when it first accepts the terms; otherwise pay for a plan (`/plan`) or redeem an invite code with `/invite <code>`.
 3. Send `/newbot <name>`. The reply contains the signing secret `tgs1.<UUID>.<key>`. Save it as `TG_SUPPORT_SECRET` right away: the Service bot deletes that message after ten minutes. If you lose it, `/rotate <bot_id>` issues a new one (`/bots` lists your bots and their IDs). The UUID in the secret is the Service's bot ID; it differs from the numeric Telegram bot ID in `BOT_TOKEN`.
 
 Never send the Telegram bot token or your host keys to the Service bot. `/help` lists all Service bot commands.
